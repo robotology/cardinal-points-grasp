@@ -124,9 +124,12 @@ class GraspProcessorModule : public RFModule
 
     };
 
+
+
     string moduleName;
 
     RpcClient superq_rpc;
+    RpcClient point_cloud_rpc;
     RpcClient action_render_rpc;
     RpcServer module_rpc;   //will be replaced by idl services
 
@@ -168,8 +171,12 @@ class GraspProcessorModule : public RFModule
 
         //  open the necessary ports
         superq_rpc.open("/" + moduleName + "/superquadricRetrieve:rpc");
+        point_cloud_rpc.open("/" + moduleName + "/pointCloud:rpc");
         action_render_rpc.open("/" + moduleName + "/actionRenderer:rpc");
         module_rpc.open("/" + moduleName + "/cmd:rpc");
+
+        //  attach callback
+        attach(module_rpc);
 
         //  initialize an empty point cloud to display
         PointCloud<DataXYZRGBA> pc;
@@ -244,7 +251,7 @@ class GraspProcessorModule : public RFModule
     /****************************************************************/
     bool updateModule() override
     {
-        return true;
+        return false;
     }
 
     /****************************************************************/
@@ -257,6 +264,7 @@ class GraspProcessorModule : public RFModule
     bool interruptModule() override
     {
         superq_rpc.interrupt();
+        point_cloud_rpc.interrupt();
         action_render_rpc.interrupt();
         module_rpc.interrupt();
         closing = true;
@@ -269,10 +277,33 @@ class GraspProcessorModule : public RFModule
     bool close() override
     {
         superq_rpc.close();
+        point_cloud_rpc.close();
         action_render_rpc.close();
         module_rpc.close();
 
         return true;
+
+    }
+
+    /****************************************************************/
+    bool respond(const Bottle& command, Bottle& reply) override
+    {
+        string obj = command.get(0).asString();
+        yDebug() << "Requested object: " << obj;
+        PointCloud<DataXYZRGBA> pc;
+        pc.clear();
+        if (requestRefreshPointCloud(pc, obj))
+        {
+            if(requestRefreshSuperquadric(pc))
+            {
+                reply.addString("ack");
+                return true;
+            }
+        }
+
+        reply.addString("nack");
+
+        return false;
 
     }
 
@@ -291,76 +322,96 @@ class GraspProcessorModule : public RFModule
     }
 
     /****************************************************************/
-    bool refreshSuperquadric(const Property &superq)
+    void refreshSuperquadric(const Vector superq_params)
     {
         //  the incoming message has the following syntax
+        //  (center-x center-y center-z angle size-x size-y size-z epsilon-1 epsilon-2)
+        //  we need to reformat the vector in the format
         //  (dimensions (x0 x1 x2)) (exponents (x3 x4)) (center (x5 x6 x7)) (orientation (x8 x9 x10 x11))
 
-        //  Show superquadric info for debugging
-        yInfo() << "Superquadric: " << superq.toString();
+        Vector superq_params_sorted;
 
-        //  pass the parameters as a single vector
-        Vector params;
+        superq_params_sorted(0) = superq_params(4);
+        superq_params_sorted(1) = superq_params(5);
+        superq_params_sorted(2) = superq_params(6);
+        superq_params_sorted(3) = superq_params(7);
+        superq_params_sorted(4) = superq_params(8);
+        superq_params_sorted(5) = superq_params(0);
+        superq_params_sorted(6) = superq_params(1);
+        superq_params_sorted(7) = superq_params(2);
+        superq_params_sorted(8) = superq_params(3);
+        superq_params_sorted(9) = 0.0;
+        superq_params_sorted(10) = 0.0;
+        superq_params_sorted(11) = 1.0;
 
-        Bottle *superq_dimension = superq.find("dimensions").asList();
-        if (!superq_dimension->isNull())
-            for (int i=0; i<superq_dimension->size(); i++)
-                params.push_back(superq_dimension->get(i).asDouble());
+        LockGuard lg(mutex);
 
-        Bottle *superq_exponents = superq.find("exponents").asList();
-        if (!superq_exponents->isNull())
-            for (int i=0; i<superq_exponents->size(); i++)
-                params.push_back(superq_exponents->get(i).asDouble());
+        vtk_superquadric ->set_parameters(superq_params_sorted);
 
-        Bottle *superq_center = superq.find("center").asList();
-        if (!superq_center->isNull())
-            for (int i=0; i<superq_center->size(); i++)
-                params.push_back(superq_center->get(i).asDouble());
+    }
 
-        Bottle *superq_orientation = superq.find("orientation").asList();
-        if (!superq_orientation->isNull())
-            for (int i=0; i<superq_orientation->size(); i++)
-                params.push_back(superq_orientation->get(i).asDouble());
+    /****************************************************************/
+    bool requestRefreshPointCloud(PointCloud<DataXYZRGBA> point_cloud, const string &object)
+    {
+        //  query point-cloud-read via rpc for the point cloud
+        //  command: get_point_cloud objectName
+        //  put point cloud into container, return true if operation was ok
+        //  or call refreshpointcloud
+        Bottle cmd_request;
+        cmd_request.clear();
 
-        //  check whether we have a sufficient number of parameters
-        if (params.size() == 12)
-            {
-            vtk_superquadric->set_parameters(params);
+        cmd_request.addString("get_point_cloud");
+        cmd_request.addString(object);
+
+        point_cloud_rpc.write(cmd_request, point_cloud);
+
+        if (point_cloud.size() > 0)
+        {
+            yDebug() << "Point cloud retrieved; contains " << point_cloud.size() << "points";
+            refreshPointCloud(point_cloud);
             return true;
-            }
+        }
         else
         {
-            yError() << "Invalid superquadric";
+            yError() << "Point cloud null or empty";
             return false;
         }
 
     }
 
     /****************************************************************/
-    bool requestPointCloud(PointCloud<DataXYZRGBA> &point_cloud, const string &object)
-    {
-        //  query point-cloud-read via rpc for the point cloud
-        //  command: get_point_cloud objectName
-        //  put point cloud into container, return true if operation was ok
-        //  or call refreshpointcloud
-        return true;
-    }
-
-    /****************************************************************/
-    bool requestSuperquadric(Superquadric &superquadric, const PointCloud<DataXYZRGBA> &point_cloud)
+    bool requestRefreshSuperquadric(PointCloud<DataXYZRGBA> &point_cloud)
     {
         //  query find-superquadric via rpc for the superquadric
         //  command: (point cloud)
         //  parse the reply (center-x center-y center-z angle size-x size-y size-z epsilon-1 epsilon-2)
         //  refresh superquadric with parameters
+        Bottle sq_reply;
+        sq_reply.clear();
 
-        return true;
+        superq_rpc.write(point_cloud, sq_reply);
+
+        Vector superq_parameters;
+        sq_reply.write(superq_parameters);
+
+        if (superq_parameters.size() == 9)
+        {
+            refreshSuperquadric(superq_parameters);
+            return true;
+        }
+        else
+        {
+            yError() << "Retrieved superquadric is invalid! " << superq_parameters.toString();
+            return false;
+        }
+
     }
 
     /****************************************************************/
     void computeGraspCandidates()
     {
-        //  just as in previous implementation
+
+
     }
 
 
