@@ -124,8 +124,6 @@ class GraspProcessorModule : public RFModule
 
     };
 
-
-
     string moduleName;
 
     RpcClient superq_rpc;
@@ -440,10 +438,8 @@ class GraspProcessorModule : public RFModule
 
 
 
-
-
-
-
+public:
+    GraspProcessorModule(): closing(false), table_height_z(-0.14) {}
 
 };
 
