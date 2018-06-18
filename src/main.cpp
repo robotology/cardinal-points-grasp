@@ -50,6 +50,62 @@ Mutex mutex;
 
 /****************************************************************/
 
+class GraspPose
+{
+public:
+    //  essential parameters for representing a grasping pose
+    vtkSmartPointer<vtkAxesActor> pose_vtk_actor;
+    vtkSmartPointer<vtkTransform> pose_vtk_transform;
+    Matrix pose_transform;
+    Matrix pose_rotation;
+    Vector pose_translation;
+    Vector pose_ax_size;
+
+    GraspPose() : pose_transform(4,4), pose_rotation(3,3), pose_translation(3), pose_ax_size(3)
+    {
+        pose_transform.eye();
+        pose_rotation.eye();
+        pose_translation.zero();
+        pose_ax_size.zero();
+        pose_vtk_actor = vtkSmartPointer<vtkAxesActor>::New();
+        pose_vtk_transform = vtkSmartPointer<vtkTransform>::New();
+    }
+
+    //  methods to be defined
+    bool setHomogeneousTransform(const Matrix &rotation, const Vector &translation)
+    {
+        //  set the 4x4 homogeneous transform given 3x3 rotation and 1x3 translation
+        if (rotation.cols() == 3 && rotation.rows() == 3 && translation.size() == 3)
+        {
+            pose_transform.setSubmatrix(rotation, 0, 0);
+            pose_transform.setSubcol(translation, 0, 3);
+            return true;
+        }
+        else
+            return false;
+    }
+
+    void setvtkTransform(const Matrix &transform)
+    {
+        vtkSmartPointer<vtkMatrix4x4> m_vtk = vtkSmartPointer<vtkMatrix4x4>::New();
+        m_vtk->Zero();
+        for (size_t i = 0; i < 4; i++)
+        {
+            for(size_t j = 0; j < 4; j++)
+            {
+                m_vtk->SetElement(i, j, transform(i, j));
+            }
+        }
+
+        pose_vtk_transform->SetMatrix(m_vtk);
+    }
+
+
+};
+
+
+/****************************************************************/
+
 class UpdateCommand : public vtkCommand
 {
     const bool *closing;
@@ -99,30 +155,6 @@ public:
 class GraspProcessorModule : public RFModule
 {
 
-    class GraspPose
-    {
-    public:
-        //  essential parameters for representing a grasping pose
-        vtkSmartPointer<vtkAxesActor> pose_vtk_actor;
-        vtkSmartPointer<vtkTransform> pose_vtk_transform;
-        Matrix pose_transform;
-        Matrix pose_rotation;
-        Vector pose_translation;
-        Vector pose_ax_size;
-
-        GraspPose() : pose_transform(4,4), pose_rotation(3,3), pose_translation(3), pose_ax_size(3)
-        {
-            pose_transform.eye();
-            pose_rotation.eye();
-            pose_translation.zero();
-            pose_ax_size.zero();
-            pose_vtk_actor = vtkSmartPointer<vtkAxesActor>::New();
-            pose_vtk_transform = vtkSmartPointer<vtkTransform>::New();
-        }
-
-        //  methods to be defined
-
-    };
 
     string moduleName;
 
@@ -294,6 +326,7 @@ class GraspProcessorModule : public RFModule
         {
             if(requestRefreshSuperquadric(pc))
             {
+                computeGraspCandidates();
                 reply.addString("ack");
                 return true;
             }
@@ -418,40 +451,128 @@ class GraspProcessorModule : public RFModule
     }
 
     /****************************************************************/
+    bool isCandidateGraspFeasible(const GraspPose &candidate_pose)
+    {
+        //  filter candidate grasp. True for good grasp
+        Vector root_z_axis(3, 0.0);
+        root_z_axis(2) = 1;
+
+        using namespace yarp::math;
+
+        /*
+         * Filtering parameters:
+         * 1 - height wrt table
+         * 2 - grasp width wrt hand x axis
+         * 3 - palm width
+         * 4 - thumb cannot point down
+         */
+
+        bool ok1, ok2, ok3, ok4;
+        ok1 = candidate_pose.pose_transform(3, 2) > table_height_z;
+        ok2 = candidate_pose.pose_ax_size(0) * 2 < grasp_width_x;
+        ok3 = candidate_pose.pose_ax_size(1) * 2 < palm_width_y;
+        ok4 = dot(candidate_pose.pose_transform.subcol(0, 1, 3), root_z_axis) <= 0.0;
+
+        return (ok1 && ok2 && ok3 && ok4);
+    }
+
+    /****************************************************************/
     void computeGraspCandidates()
     {
+        //  compute a series of viable grasp candidates according to superquadric parameters
+        LockGuard lg(mutex);
 
+        //  detach vtk actors corresponding to poses, if any are present
+        for (GraspPose grasp_pose : pose_candidates)
+        {
+            vtk_renderer->RemoveActor(grasp_pose.pose_vtk_actor);
+        }
+
+        //  get superquadric parameters
+        pose_candidates.clear();
+        Vector superq_center = vtk_superquadric->getCenter();
+        Vector superq_XYZW_orientation = vtk_superquadric->getOrientationXYZW();
+        Vector superq_axes_size = vtk_superquadric->getAxesSize();
+
+        //  get orientation of the superq in 3x3 rotation matrix form
+        using namespace yarp::math;
+        superq_XYZW_orientation(3) /= (180 / M_PI);
+        Matrix superq_mat_orientation = axis2dcm(superq_XYZW_orientation).submatrix(0,2, 0,2);
+
+        yDebug() << "Superquadric orientation: " << superq_mat_orientation.toString();
+
+        //  columns of rotation matrix are superq axes direction
+        //  in root reference frame;
+        Vector sq_axis_x = superq_mat_orientation.getCol(0);
+        Vector sq_axis_y = superq_mat_orientation.getCol(1);
+        Vector sq_axis_z = superq_mat_orientation.getCol(2);
+
+        //  create all possible candidates for pose evaluation
+        //  create search space for grasp axes x and y
+        vector<Vector> search_space_gx = {sq_axis_x, -1*sq_axis_x, sq_axis_y, -1*sq_axis_y};
+        vector<Vector> search_space_gy = {sq_axis_x, -1*sq_axis_x, sq_axis_y, -1*sq_axis_y, sq_axis_z, -1*sq_axis_z};
+
+        //  create actual candidates
+        for (size_t idx = 0; idx < search_space_gx.size(); idx++)
+        {
+            Vector gx = search_space_gx[idx];
+            //  for each candidate gx axis, try all gy possibilities
+            for (size_t jdx = 0; jdx < search_space_gy.size(); jdx++)
+            {
+                //  create a gx, gy orthogonal couple
+                Vector gy = search_space_gy[jdx];
+                if (dot(gx, gy)*dot(gx, gy) < 0.0001)
+                {
+                    //  create gz with cross product
+                    //  create candidate entry
+                    Vector gz = cross(gx, gy);
+                    GraspPose candidate_pose;
+                    candidate_pose.pose_rotation.setCol(0, gx);
+                    candidate_pose.pose_rotation.setCol(1, gy);
+                    candidate_pose.pose_rotation.setCol(2, gz);
+
+                    //  set the superquadric size in the direction of each g_axis
+                    candidate_pose.pose_ax_size(0) = superq_axes_size(idx/2);
+                    candidate_pose.pose_ax_size(1) = superq_axes_size(jdx/2);
+                    candidate_pose.pose_ax_size(2) = superq_axes_size(3 - idx/2 - jdx/2);
+
+                    //  translate along gz according to superquadric size
+                    //  minus sign, since we are using right hand
+                    //  left hand would have plus sign
+                    candidate_pose.pose_translation = superq_center - candidate_pose.pose_ax_size(2) * gz/norm(gz);
+
+                    if (!candidate_pose.setHomogeneousTransform(candidate_pose.pose_rotation, candidate_pose.pose_translation))
+                    {
+                        yError() << "Error setting homogeneous transform!";
+                        continue;
+                    }
+
+                    if (isCandidateGraspFeasible(candidate_pose))
+                    {
+                        //  if candidate is good, set vtk transform and actor
+                        candidate_pose.setvtkTransform(candidate_pose.pose_transform);
+                        candidate_pose.pose_vtk_actor->SetUserTransform(candidate_pose.pose_vtk_transform);
+
+                        //  fix graphical properties
+                        candidate_pose.pose_vtk_actor->AxisLabelsOff();
+                        candidate_pose.pose_vtk_actor->SetTotalLength(0.02, 0.02, 0.02);
+
+                        //  add actor to renderer
+                        vtk_renderer->AddActor(candidate_pose.pose_vtk_actor);
+                        pose_candidates.push_back(candidate_pose);
+                    }
+                }
+            }
+        }
+
+        yInfo() << "Feasible grasp candidates computed: " << pose_candidates.size();
+
+        return;
 
     }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 public:
-    GraspProcessorModule(): closing(false), table_height_z(-0.14) {}
+    GraspProcessorModule(): closing(false), table_height_z(-0.14), palm_width_y(0.1), grasp_width_x(0.1)  {}
 
 };
 
