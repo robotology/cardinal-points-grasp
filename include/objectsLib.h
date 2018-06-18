@@ -105,6 +105,6 @@ public:
     yarp::sig::Vector getAxesSize();
 
     /****************************************************************/
-    yarp::sig::Vector getOrientationWXYZ();
+    yarp::sig::Vector getOrientationXYZW();
 
 };
