@@ -75,7 +75,7 @@ public:
 
     /****************************************************************/
     void Execute(vtkObject *caller, unsigned long vtkNotUsed(eventId),
-                 void *vtkNotUsed(callData))
+                 void *vtkNotUsed(callData)) override
     {
         LockGuard lg(mutex);
         vtkRenderWindowInteractor* iren=static_cast<vtkRenderWindowInteractor*>(caller);
@@ -327,7 +327,7 @@ class GraspProcessorModule : public RFModule
         //  we need to reformat the vector in the format
         //  (dimensions (x0 x1 x2)) (exponents (x3 x4)) (center (x5 x6 x7)) (orientation (x8 x9 x10 x11))
 
-        Vector superq_params_sorted;
+        Vector superq_params_sorted(12, 0.0);
 
         superq_params_sorted(0) = superq_params(4);
         superq_params_sorted(1) = superq_params(5);
@@ -349,7 +349,7 @@ class GraspProcessorModule : public RFModule
     }
 
     /****************************************************************/
-    bool requestRefreshPointCloud(PointCloud<DataXYZRGBA> point_cloud, const string &object)
+    bool requestRefreshPointCloud(PointCloud<DataXYZRGBA> &point_cloud, const string &object)
     {
         //  query point-cloud-read via rpc for the point cloud
         //  command: get_point_cloud objectName
@@ -357,15 +357,27 @@ class GraspProcessorModule : public RFModule
         //  or call refreshpointcloud
         Bottle cmd_request;
         cmd_request.clear();
+        Bottle cmd_reply;
+        cmd_reply.clear();
+
+        point_cloud.clear();
 
         cmd_request.addString("get_point_cloud");
         cmd_request.addString(object);
 
-        point_cloud_rpc.write(cmd_request, point_cloud);
+        point_cloud_rpc.write(cmd_request, cmd_reply);
 
-        if (point_cloud.size() > 0)
+        //  cheap workaround to get the point cloud
+        Bottle* pcBt = cmd_reply.get(0).asList();
+        bool success = point_cloud.fromBottle(*pcBt);
+
+        if (success && (point_cloud.size() > 0))
         {
             yDebug() << "Point cloud retrieved; contains " << point_cloud.size() << "points";
+            for (size_t idx = 0; idx < point_cloud.size(); idx++)
+//            {
+//                yDebug() << "Point " << idx << ":" << point_cloud(idx).x << point_cloud(idx).y << point_cloud(idx).z;
+//            }
             refreshPointCloud(point_cloud);
             return true;
         }
