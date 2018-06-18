@@ -48,8 +48,6 @@ vtkSmartPointer<vtkActor> &Object::get_actor()
 }
 
 /****************************************************************/
-
-
 Points::Points(const PointCloud<DataXYZRGBA> &points, const int point_size)
 {
     vtk_points=vtkSmartPointer<vtkPoints>::New();
@@ -106,7 +104,6 @@ vtkSmartPointer<vtkPolyData> &Points::get_polydata()
 {
     return vtk_polydata;
 }
-
 
 /****************************************************************/
 Superquadric::Superquadric(const Vector &r, const double color)
@@ -201,7 +198,7 @@ Vector Superquadric::getAxesSize()
 }
 
 /****************************************************************/
-Vector Superquadric::getOrientationWXYZ()
+Vector Superquadric::getOrientationXYZW()
 {
     //  convert axis-angle orientation representation to a yarp::sig::Vector
     //  yarp considers axis angle to be [x y z theta]
