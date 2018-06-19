@@ -18,18 +18,17 @@ endif()
 
 find_package(YARP REQUIRED)
 find_package(ICUB REQUIRED)
-find_package(VTK REQUIRED)
 find_package(ICUBcontrib REQUIRED)
-
 list(APPEND CMAKE_MODULE_PATH ${YARP_MODULE_PATH})
 list(APPEND CMAKE_MODULE_PATH ${ICUB_MODULE_PATH})
 list(APPEND CMAKE_MODULE_PATH ${ICUBCONTRIB_MODULE_PATH})
 
+find_package(VTK 8.1 REQUIRED)
+include(${VTK_USE_FILE})
+
 include(ICUBcontribHelpers)
 include(ICUBcontribOptions)
 icubcontrib_set_default_prefix()
-
-include(${VTK_USE_FILE})
 
 set(headers include/objectsLib.h)
 set(sources src/main.cpp src/objectsLib.cpp)
