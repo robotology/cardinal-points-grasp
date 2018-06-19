@@ -103,7 +103,6 @@ public:
 
 };
 
-
 /****************************************************************/
 
 class UpdateCommand : public vtkCommand
@@ -152,18 +151,26 @@ public:
 
 /****************************************************************/
 
+enum class WhichHand
+{
+    HAND_RIGHT,
+    HAND_LEFT
+};
+
+/****************************************************************/
+
 class GraspProcessorModule : public RFModule
 {
-
-
     string moduleName;
 
     RpcClient superq_rpc;
     RpcClient point_cloud_rpc;
-    RpcClient action_render_rpc;
+    RpcClient action_render_rpc;    //not used atm
     RpcServer module_rpc;   //will be replaced by idl services
 
     bool closing;
+
+    WhichHand grasping_hand;
 
     //  visualization objects
     unique_ptr<Points> vtk_points;
@@ -190,13 +197,27 @@ class GraspProcessorModule : public RFModule
     {
 
         //  set module name
-        if (rf.check("name"))
+//        if (rf.check("name"))
+//        {
+//            moduleName = rf.find("name").asString();
+//        }
+//        else
+//        {
+//            moduleName = "graspProcessor";
+//        }
+        moduleName = rf.check("name", Value("graspProcessor")).asString();
+
+        //  parse for grasping hand
+        if (rf.check("hand"))
         {
-            moduleName = rf.find("name").asString();
-        }
-        else
-        {
-            moduleName = "graspProcessor";
+            if (rf.find("hand").asString() == "right")
+            {
+                grasping_hand = WhichHand::HAND_RIGHT;
+            }
+            else if (rf.find("hand").asString() == "left")
+            {
+                grasping_hand = WhichHand::HAND_LEFT;
+            }
         }
 
         //  open the necessary ports
@@ -318,23 +339,91 @@ class GraspProcessorModule : public RFModule
     /****************************************************************/
     bool respond(const Bottle& command, Bottle& reply) override
     {
-        string obj = command.get(0).asString();
-        yDebug() << "Requested object: " << obj;
-        PointCloud<DataXYZRGBA> pc;
-        pc.clear();
-        if (requestRefreshPointCloud(pc, obj))
+        //  parse for available commands
+
+        bool cmd_success = false;
+
+        if (command.check("grasp_pose"))
         {
-            if(requestRefreshSuperquadric(pc))
+            //  normal operation
+            string obj = command.find("grasp_pose").asString();
+            PointCloud<DataXYZRGBA> pc;
+            yDebug() << "Requested object: " << obj;
+            if (requestRefreshPointCloud(pc, obj))
             {
-                computeGraspCandidates();
-                reply.addString("ack");
-                return true;
+                if (requestRefreshSuperquadric(pc))
+                {
+                    computeGraspCandidates();
+                    getBestCandidatePose();
+                    cmd_success = true;
+                }
             }
         }
 
-        reply.addString("nack");
+        if (command.check("from_off_file"))
+        {
+            //  process point cloud from file and perform candidate ranking
+            string filename = command.find("from_off_file").asString();
+            //  load point cloud from .off file, store it and refresh point cloud, request and refresh superquadric and compute poses
+            PointCloud<DataXYZRGBA> pc;
 
-        return false;
+            ifstream file(filename.c_str());
+            string delimiter = " ";
+
+            if (!file.is_open())
+            {
+                yError() << "Unable to open file";
+                return false;
+            }
+
+            //  parse the OFF file line by line
+
+            string line;
+            getline(file, line);
+            if (line != "COFF")
+            {
+                yError() << "File parsing failed";
+                return false;
+            }
+            line.clear();
+            getline(file, line);
+            size_t pos = 0;
+            pos = line.find(delimiter);
+            pc.resize(stoul(line.substr(0, pos)));
+
+            //  get a line for each point and build a point cloud
+            for (size_t idx = 0; idx < pc.size(); idx++)
+            {
+                line.clear();
+                pos = 0;
+                getline(file, line);
+                vector<string> parsed_line;
+                while ((pos = line.find(delimiter)) != string::npos)
+                {
+                    parsed_line.push_back(line.substr(0, pos));
+                    line.erase(0, pos+delimiter.length());
+                }
+                parsed_line.push_back(line);
+                pc(idx).x = stof(parsed_line[0]);
+                pc(idx).y = stof(parsed_line[1]);
+                pc(idx).z = stof(parsed_line[2]);
+                pc(idx).r = (unsigned char)stoi(parsed_line[3]);
+                pc(idx).g = (unsigned char)stoi(parsed_line[4]);
+                pc(idx).b = (unsigned char)stoi(parsed_line[5]);
+                pc(idx).a = 255;
+            }
+
+            if (pc.size() > 0)
+            {
+                refreshPointCloud(pc);
+                requestRefreshSuperquadric(pc);
+                computeGraspCandidates();
+                getBestCandidatePose();
+            }
+        }
+
+        reply.addVocab(Vocab::encode(cmd_success ? "ack":"nack"));
+        return true;
 
     }
 
@@ -407,7 +496,7 @@ class GraspProcessorModule : public RFModule
         if (success && (point_cloud.size() > 0))
         {
             yDebug() << "Point cloud retrieved; contains " << point_cloud.size() << "points";
-            for (size_t idx = 0; idx < point_cloud.size(); idx++)
+//            for (size_t idx = 0; idx < point_cloud.size(); idx++)
 //            {
 //                yDebug() << "Point " << idx << ":" << point_cloud(idx).x << point_cloud(idx).y << point_cloud(idx).z;
 //            }
@@ -461,17 +550,17 @@ class GraspProcessorModule : public RFModule
 
         /*
          * Filtering parameters:
-         * 1 - height wrt table
+         * 1 - sufficient height wrt table
          * 2 - grasp width wrt hand x axis
          * 3 - palm width
          * 4 - thumb cannot point down
          */
 
         bool ok1, ok2, ok3, ok4;
-        ok1 = candidate_pose.pose_transform(3, 2) > table_height_z;
+        ok1 = candidate_pose.pose_transform(3, 2) > table_height_z + palm_width_y/2;
         ok2 = candidate_pose.pose_ax_size(0) * 2 < grasp_width_x;
         ok3 = candidate_pose.pose_ax_size(1) * 2 < palm_width_y;
-        ok4 = dot(candidate_pose.pose_transform.subcol(0, 1, 3), root_z_axis) <= 0.0;
+        ok4 = dot(candidate_pose.pose_transform.subcol(0, 1, 3), root_z_axis) <= 0.3;
 
         return (ok1 && ok2 && ok3 && ok4);
     }
@@ -539,7 +628,14 @@ class GraspProcessorModule : public RFModule
                     //  translate along gz according to superquadric size
                     //  minus sign, since we are using right hand
                     //  left hand would have plus sign
-                    candidate_pose.pose_translation = superq_center - candidate_pose.pose_ax_size(2) * gz/norm(gz);
+                    if (grasping_hand == WhichHand::HAND_RIGHT)
+                    {
+                        candidate_pose.pose_translation = superq_center - candidate_pose.pose_ax_size(2) * gz/norm(gz);
+                    }
+                    else if (grasping_hand == WhichHand::HAND_LEFT)
+                    {
+                        candidate_pose.pose_translation = superq_center + candidate_pose.pose_ax_size(2) * gz/norm(gz);
+                    }
 
                     if (!candidate_pose.setHomogeneousTransform(candidate_pose.pose_rotation, candidate_pose.pose_translation))
                     {
@@ -566,13 +662,29 @@ class GraspProcessorModule : public RFModule
         }
 
         yInfo() << "Feasible grasp candidates computed: " << pose_candidates.size();
+        yInfo() << "Object size: x " << 2*superq_axes_size(0) << " y " << 2*superq_axes_size(1) << " z " << 2*superq_axes_size(2);
 
         return;
 
     }
 
+    GraspPose getBestCandidatePose()
+    {
+        //  compute which is the best
+        //  bogus lol
+        GraspPose best_candidate;
+
+        if (pose_candidates.size())
+        {
+            best_candidate = pose_candidates[0];
+            yInfo() << "Best candidate: cartesian " << best_candidate.pose_translation.toString() << " pose " << yarp::math::dcm2axis(best_candidate.pose_rotation).toString();
+        }
+        return best_candidate;
+
+    }
+
 public:
-    GraspProcessorModule(): closing(false), table_height_z(-0.14), palm_width_y(0.1), grasp_width_x(0.1)  {}
+    GraspProcessorModule(): closing(false), table_height_z(-0.14), palm_width_y(0.1), grasp_width_x(0.1), grasping_hand(WhichHand::HAND_RIGHT)  {}
 
 };
 
