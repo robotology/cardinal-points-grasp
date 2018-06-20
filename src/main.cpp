@@ -264,16 +264,17 @@ class GraspProcessorModule : public RFModule
         vtk_widget->InteractiveOn();
 
         //  set up the camera position according to the point cloud (initially empty)
-        vector<double> pc_bounds(6), pc_centroid(3);
-        vtk_points->get_polydata()->GetBounds(pc_bounds.data());
+//        vector<double> pc_bounds(6), pc_centroid(3);
+//        vtk_points->get_polydata()->GetBounds(pc_bounds.data());
 
-        for (size_t i=0; i<pc_centroid.size(); i++)
-        {
-            pc_centroid[i] = 0.5*(pc_bounds[i<<1]+pc_bounds[(i<<1)+1]);
-        }
+//        for (size_t i=0; i<pc_centroid.size(); i++)
+//        {
+//            pc_centroid[i] = 0.5*(pc_bounds[i<<1]+pc_bounds[(i<<1)+1]);
+//        }
 
         vtk_camera = vtkSmartPointer<vtkCamera>::New();
-        vtk_camera->SetPosition(pc_centroid[0]+1.0, pc_centroid[1], pc_centroid[2]+0.5);
+        //vtk_camera->SetPosition(pc_centroid[0]+1.0, pc_centroid[1], pc_centroid[2]+0.5);
+        vtk_camera->SetPosition(0.1, 0.0, 0.5);
         vtk_camera->SetViewUp(0.0, 0.0, 1.0);
         vtk_renderer->SetActiveCamera(vtk_camera);
 
@@ -419,6 +420,7 @@ class GraspProcessorModule : public RFModule
                 requestRefreshSuperquadric(pc);
                 computeGraspCandidates();
                 getBestCandidatePose();
+                cmd_success = true;
             }
         }
 
@@ -552,14 +554,15 @@ class GraspProcessorModule : public RFModule
          * Filtering parameters:
          * 1 - sufficient height wrt table
          * 2 - grasp width wrt hand x axis
-         * 3 - palm width
+         * 3 - sufficient size wrt palm width
          * 4 - thumb cannot point down
          */
 
         bool ok1, ok2, ok3, ok4;
-        ok1 = candidate_pose.pose_transform(3, 2) > table_height_z + palm_width_y/2;
+        yDebug() << candidate_pose.pose_transform.toString();
+        ok1 = candidate_pose.pose_transform(2, 3) - palm_width_y/2 > table_height_z;
         ok2 = candidate_pose.pose_ax_size(0) * 2 < grasp_width_x;
-        ok3 = candidate_pose.pose_ax_size(1) * 2 < palm_width_y;
+        ok3 = candidate_pose.pose_ax_size(1) * 2 > palm_width_y;
         ok4 = dot(candidate_pose.pose_transform.subcol(0, 1, 3), root_z_axis) <= 0.3;
 
         return (ok1 && ok2 && ok3 && ok4);
@@ -587,8 +590,6 @@ class GraspProcessorModule : public RFModule
         using namespace yarp::math;
         superq_XYZW_orientation(3) /= (180 / M_PI);
         Matrix superq_mat_orientation = axis2dcm(superq_XYZW_orientation).submatrix(0,2, 0,2);
-
-        yDebug() << "Superquadric orientation: " << superq_mat_orientation.toString();
 
         //  columns of rotation matrix are superq axes direction
         //  in root reference frame;
@@ -661,8 +662,15 @@ class GraspProcessorModule : public RFModule
             }
         }
 
-        yInfo() << "Feasible grasp candidates computed: " << pose_candidates.size();
+        yInfo() << "Object orientation: " << superq_mat_orientation.toString();
+        yInfo() << "Object center " << superq_center.toString();
         yInfo() << "Object size: x " << 2*superq_axes_size(0) << " y " << 2*superq_axes_size(1) << " z " << 2*superq_axes_size(2);
+
+        yInfo() << "Feasible grasp candidates computed: " << pose_candidates.size();
+        for (GraspPose o : pose_candidates)
+        {
+            yDebug() << o.pose_transform.toString();
+        }
 
         return;
 
@@ -677,6 +685,10 @@ class GraspProcessorModule : public RFModule
         if (pose_candidates.size())
         {
             best_candidate = pose_candidates[0];
+            LockGuard lg(mutex);
+            vtk_renderer->RemoveActor(best_candidate.pose_vtk_actor);
+            best_candidate.pose_vtk_actor->SetTotalLength(0.06, 0.06, 0.06);
+            vtk_renderer->AddActor(best_candidate.pose_vtk_actor);
             yInfo() << "Best candidate: cartesian " << best_candidate.pose_translation.toString() << " pose " << yarp::math::dcm2axis(best_candidate.pose_rotation).toString();
         }
         return best_candidate;
@@ -684,7 +696,7 @@ class GraspProcessorModule : public RFModule
     }
 
 public:
-    GraspProcessorModule(): closing(false), table_height_z(-0.14), palm_width_y(0.1), grasp_width_x(0.1), grasping_hand(WhichHand::HAND_RIGHT)  {}
+    GraspProcessorModule(): closing(false), table_height_z(-0.15), palm_width_y(0.06), grasp_width_x(0.12), grasping_hand(WhichHand::HAND_RIGHT)  {}
 
 };
 
