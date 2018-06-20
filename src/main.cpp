@@ -408,9 +408,9 @@ class GraspProcessorModule : public RFModule
                 pc(idx).x = stof(parsed_line[0]);
                 pc(idx).y = stof(parsed_line[1]);
                 pc(idx).z = stof(parsed_line[2]);
-                pc(idx).r = (unsigned char)stoi(parsed_line[3]);
-                pc(idx).g = (unsigned char)stoi(parsed_line[4]);
-                pc(idx).b = (unsigned char)stoi(parsed_line[5]);
+                pc(idx).r = static_cast<unsigned char>(stoi(parsed_line[3]));
+                pc(idx).g = static_cast<unsigned char>(stoi(parsed_line[4]));
+                pc(idx).b = static_cast<unsigned char>(stoi(parsed_line[5]));
                 pc(idx).a = 255;
             }
 
