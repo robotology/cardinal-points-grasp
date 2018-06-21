@@ -122,7 +122,7 @@ Superquadric::Superquadric(const Vector &r, const double color)
 
     vtk_contours=vtkSmartPointer<vtkContourFilter>::New();
     vtk_contours->SetInputConnection(vtk_sample->GetOutputPort());
-    vtk_contours->GenerateValues(1,1.0,1.0);
+    vtk_contours->SetValue(0, 0.0);
 
     vtk_mapper=vtkSmartPointer<vtkPolyDataMapper>::New();
     vtk_mapper->SetInputConnection(vtk_contours->GetOutputPort());
@@ -134,6 +134,9 @@ Superquadric::Superquadric(const Vector &r, const double color)
 
     vtk_transform = vtkSmartPointer<vtkTransform>::New();
     vtk_transform->Identity();
+
+    set_parameters(r);
+
     vtk_actor->SetUserTransform(vtk_transform);
 }
 
@@ -146,9 +149,6 @@ void Superquadric::set_parameters(const Vector &r)
     vtk_superquadric->SetScale(r[0], r[1], r[2]);
     vtk_superquadric->SetPhiRoundness(r[3]);
     vtk_superquadric->SetThetaRoundness(r[4]);
-
-    //yInfo() << "Phi roundedness:" << r[3];
-    //yInfo() << "Theta roundedness:" << r[4];
 
     vtk_sample->SetModelBounds(-2*r[0], 2*r[0], -2*r[1], 2*r[1], -2*r[2], 2*r[2]);
 
