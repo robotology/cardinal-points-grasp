@@ -429,7 +429,9 @@ class GraspProcessorModule : public RFModule
                centroid[i] = 0.5 * (bounds[i<<1] + bounds[(i<<1)+1]);
            }
 
-           vtk_camera->SetPosition(centroid[0]+0.6, centroid[1], centroid[2]+0.6);
+           vtk_camera->SetPosition(centroid[0]+1.0, centroid[1], centroid[2]+2.0);
+           vtk_camera->SetViewUp(0, 0, 1);
+           vtk_renderWindowInteractor->Render();
 
        }
     }
