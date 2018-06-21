@@ -108,3 +108,25 @@ public:
     yarp::sig::Vector getOrientationXYZW();
 
 };
+
+class GraspPose
+{
+public:
+    //  essential parameters for representing a grasping pose
+    vtkSmartPointer<vtkAxesActor> pose_vtk_actor;
+    vtkSmartPointer<vtkTransform> pose_vtk_transform;
+    yarp::sig::Matrix pose_transform;
+    yarp::sig::Matrix pose_rotation;
+    yarp::sig::Vector pose_translation;
+    yarp::sig::Vector pose_ax_size;
+
+    /****************************************************************/
+    GraspPose();
+
+    /****************************************************************/
+    bool setHomogeneousTransform(const yarp::sig::Matrix &rotation, const yarp::sig::Vector &translation);
+
+    /****************************************************************/
+    void setvtkTransform(const yarp::sig::Matrix &transform);
+
+};

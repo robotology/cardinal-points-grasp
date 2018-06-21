@@ -218,5 +218,46 @@ Vector Superquadric::getOrientationXYZW()
     return orientationWXYZ_vec;
 }
 
+/****************************************************************/
+GraspPose::GraspPose()
+{
+    pose_transform.eye();
+    pose_rotation.eye();
+    pose_translation.zero();
+    pose_ax_size.zero();
+    pose_vtk_actor = vtkSmartPointer<vtkAxesActor>::New();
+    pose_vtk_transform = vtkSmartPointer<vtkTransform>::New();
+}
+
+/****************************************************************/
+bool GraspPose::setHomogeneousTransform(const Matrix &rotation, const Vector &translation)
+{
+    //  set the 4x4 homogeneous transform given 3x3 rotation and 1x3 translation
+    if (rotation.cols() == 3 && rotation.rows() == 3 && translation.size() == 3)
+    {
+        pose_transform.setSubmatrix(rotation, 0, 0);
+        pose_transform.setSubcol(translation, 0, 3);
+        return true;
+    }
+    else
+        return false;
+}
+
+/****************************************************************/
+void GraspPose::setvtkTransform(const Matrix &transform)
+{
+    vtkSmartPointer<vtkMatrix4x4> m_vtk = vtkSmartPointer<vtkMatrix4x4>::New();
+    m_vtk->Zero();
+    for (size_t i = 0; i < 4; i++)
+    {
+        for(size_t j = 0; j < 4; j++)
+        {
+            m_vtk->SetElement(i, j, transform(i, j));
+        }
+    }
+
+    pose_vtk_transform->SetMatrix(m_vtk);
+}
+
 
 
