@@ -196,15 +196,6 @@ class GraspProcessorModule : public RFModule
     bool configure(ResourceFinder &rf) override
     {
 
-        //  set module name
-//        if (rf.check("name"))
-//        {
-//            moduleName = rf.find("name").asString();
-//        }
-//        else
-//        {
-//            moduleName = "graspProcessor";
-//        }
         moduleName = rf.check("name", Value("graspProcessor")).asString();
 
         //  parse for grasping hand
@@ -234,9 +225,9 @@ class GraspProcessorModule : public RFModule
         pc.clear();
         vtk_points = unique_ptr<Points>(new Points(pc, 3));
 
-        //  initialize a zero-superquadric to display (cyan coloured)
-        Vector r(11, 0.0);
-        vtk_superquadric = unique_ptr<Superquadric>(new Superquadric(r, 1.2));
+        //  initialize a zero-superquadric to display
+        double r[] = {0.0, 0.0, 0.0, 1.0, 1.0, 0, 0, 0, 0, 0, 0, 1};
+        vtk_superquadric = unique_ptr<Superquadric>(new Superquadric(Vector(12, r), 1.2));
 
         //  set up rendering window and interactor
         vtk_renderer = vtkSmartPointer<vtkRenderer>::New();
@@ -263,17 +254,7 @@ class GraspProcessorModule : public RFModule
         vtk_widget->SetEnabled(1);
         vtk_widget->InteractiveOn();
 
-        //  set up the camera position according to the point cloud (initially empty)
-//        vector<double> pc_bounds(6), pc_centroid(3);
-//        vtk_points->get_polydata()->GetBounds(pc_bounds.data());
-
-//        for (size_t i=0; i<pc_centroid.size(); i++)
-//        {
-//            pc_centroid[i] = 0.5*(pc_bounds[i<<1]+pc_bounds[(i<<1)+1]);
-//        }
-
         vtk_camera = vtkSmartPointer<vtkCamera>::New();
-        //vtk_camera->SetPosition(pc_centroid[0]+1.0, pc_centroid[1], pc_centroid[2]+0.5);
         vtk_camera->SetPosition(0.1, 0.0, 0.5);
         vtk_camera->SetViewUp(0.0, 0.0, 1.0);
         vtk_renderer->SetActiveCamera(vtk_camera);
@@ -282,7 +263,6 @@ class GraspProcessorModule : public RFModule
         vtk_style=vtkSmartPointer<vtkInteractorStyleSwitch>::New();
         vtk_style->SetCurrentStyleToTrackballCamera();
         vtk_renderWindowInteractor->SetInteractorStyle(vtk_style);
-
         vtk_renderWindowInteractor->Initialize();
         vtk_renderWindowInteractor->CreateRepeatingTimer(10);
 
@@ -440,6 +420,17 @@ class GraspProcessorModule : public RFModule
            vtk_points->set_points(points);
            vtk_points->set_colors(points);
 
+           //   position the camera to look at point cloud
+           vector<double> bounds(6), centroid(3);
+           vtk_points->get_polydata()->GetBounds(bounds.data());
+
+           for (size_t i=0; i<centroid.size(); i++)
+           {
+               centroid[i] = 0.5 * (bounds[i<<1] + bounds[(i<<1)+1]);
+           }
+
+           vtk_camera->SetPosition(centroid[0]+0.6, centroid[1], centroid[2]+0.6);
+
        }
     }
 
@@ -498,10 +489,6 @@ class GraspProcessorModule : public RFModule
         if (success && (point_cloud.size() > 0))
         {
             yDebug() << "Point cloud retrieved; contains " << point_cloud.size() << "points";
-//            for (size_t idx = 0; idx < point_cloud.size(); idx++)
-//            {
-//                yDebug() << "Point " << idx << ":" << point_cloud(idx).x << point_cloud(idx).y << point_cloud(idx).z;
-//            }
             refreshPointCloud(point_cloud);
             return true;
         }
@@ -676,6 +663,7 @@ class GraspProcessorModule : public RFModule
 
     }
 
+    /****************************************************************/
     GraspPose getBestCandidatePose()
     {
         //  compute which is the best
@@ -695,8 +683,10 @@ class GraspProcessorModule : public RFModule
 
     }
 
+
+
 public:
-    GraspProcessorModule(): closing(false), table_height_z(-0.15), palm_width_y(0.06), grasp_width_x(0.12), grasping_hand(WhichHand::HAND_RIGHT)  {}
+    GraspProcessorModule(): closing(false), table_height_z(-0.15), palm_width_y(0.06), grasp_width_x(0.1), grasping_hand(WhichHand::HAND_RIGHT)  {}
 
 };
 
