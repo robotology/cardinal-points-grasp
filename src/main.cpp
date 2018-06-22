@@ -533,7 +533,6 @@ class GraspProcessorModule : public RFModule
         Vector o_d = dcm2axis(candidate_pose.pose_rotation);
         Vector x_d_hat, o_d_hat, q_d_hat;
 
-        icart->setPosePriority("position");
         icart->askForPose(x_d, o_d, x_d_hat, o_d_hat, q_d_hat);
 
         yDebug() << "Requested: " << candidate_pose.pose_transform.toString();
@@ -551,7 +550,7 @@ class GraspProcessorModule : public RFModule
 
         double cost_orientation = norm(orientation_error_vector * sin(orientation_error_vector(3)));
 
-        cost_function = cost_position + cost_orientation;
+        cost_function = cost_position + 2*cost_orientation;
 
         //  set cost function of the pose
         candidate_pose.pose_cost_function = cost_function;
@@ -565,6 +564,35 @@ class GraspProcessorModule : public RFModule
     {
         //  compute a series of viable grasp candidates according to superquadric parameters
         LockGuard lg(mutex);
+
+        //  store the context for the previous iKinCartesianController config
+        int context_backup;
+        icart->storeContext(&context_backup);
+
+        //  set up the context for the computation of the candidates
+        //  enable all joints
+        Vector dof;
+        icart->getDOF(dof);
+        yDebug() << "Previous DOF config: [" << dof.toString() << "]";
+        Vector new_dof(10, 1);
+        new_dof(1) = 0.0;
+        icart->setDOF(new_dof, dof);
+        yDebug() << "New DOF config: [" << new_dof.toString() << "]";
+        icart->setPosePriority("position");
+        icart->setInTargetTol(0.001);
+
+        double min_torso_pitch, max_torso_pitch;
+        double min_torso_yaw, max_torso_yaw;
+        double min_torso_roll, max_torso_roll;
+        icart -> getLimits(0, &min_torso_pitch, &max_torso_pitch);
+        icart -> getLimits(1, &min_torso_roll, &max_torso_roll);
+        icart -> getLimits(2, &min_torso_yaw, &max_torso_yaw);
+        yInfo() << "Torso current pitch limits: min " << min_torso_pitch << " max " << max_torso_pitch;
+        yInfo() << "Torso current roll limits: min " << min_torso_roll << " max " << max_torso_roll;
+        yInfo() << "Torso current yaw limits: min " << min_torso_yaw << " max " << max_torso_yaw;
+        icart -> setLimits(0, min_torso_pitch, max_torso_pitch);
+        icart -> setLimits(1, min_torso_roll, max_torso_roll);
+        icart -> setLimits(2, min_torso_yaw, max_torso_yaw);
 
         //  detach vtk actors corresponding to poses, if any are present
         for (GraspPose grasp_pose : pose_candidates)
@@ -649,13 +677,15 @@ class GraspProcessorModule : public RFModule
                         //  fix graphical properties
                         candidate_pose.pose_vtk_actor->AxisLabelsOff();
                         candidate_pose.pose_vtk_actor->SetTotalLength(0.02, 0.02, 0.02);
-                        candidate_pose.setvtkActorCaption(to_string(candidate_pose.pose_cost_function));
+
+                        stringstream ss;
+                        ss << fixed << setprecision(2) << candidate_pose.pose_cost_function;
+                        candidate_pose.setvtkActorCaption(ss.str());
 
                         //  add actor to renderer
                         vtk_renderer->AddActor(candidate_pose.pose_vtk_actor);
                         vtk_renderer->AddActor(candidate_pose.pose_vtk_caption_actor);
                         pose_candidates.push_back(candidate_pose);
-
 
                     }
                 }
@@ -671,6 +701,9 @@ class GraspProcessorModule : public RFModule
         {
             yDebug() << o.pose_transform.toString();
         }
+
+        //  restore previous context
+        icart->restoreContext(context_backup);
 
         return;
 
@@ -696,6 +729,8 @@ class GraspProcessorModule : public RFModule
             best_candidate.pose_vtk_actor->SetTotalLength(0.06, 0.06, 0.06);
             vtk_renderer->AddActor(best_candidate.pose_vtk_actor);
             yInfo() << "Best candidate: cartesian " << best_candidate.pose_translation.toString() << " pose " << yarp::math::dcm2axis(best_candidate.pose_rotation).toString();
+
+
         }
         return best_candidate;
 
