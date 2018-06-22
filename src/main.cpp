@@ -18,6 +18,9 @@
 #include <yarp/os/all.h>
 #include <yarp/sig/all.h>
 #include <yarp/math/Math.h>
+#include <yarp/dev/Drivers.h>
+#include <yarp/dev/CartesianControl.h>
+#include <yarp/dev/PolyDriver.h>
 
 #include <vtkSmartPointer.h>
 #include <vtkCommand.h>
@@ -45,63 +48,9 @@
 using namespace std;
 using namespace yarp::os;
 using namespace yarp::sig;
+using namespace yarp::dev;
 
 Mutex mutex;
-
-/****************************************************************/
-
-class GraspPose
-{
-public:
-    //  essential parameters for representing a grasping pose
-    vtkSmartPointer<vtkAxesActor> pose_vtk_actor;
-    vtkSmartPointer<vtkTransform> pose_vtk_transform;
-    Matrix pose_transform;
-    Matrix pose_rotation;
-    Vector pose_translation;
-    Vector pose_ax_size;
-
-    GraspPose() : pose_transform(4,4), pose_rotation(3,3), pose_translation(3), pose_ax_size(3)
-    {
-        pose_transform.eye();
-        pose_rotation.eye();
-        pose_translation.zero();
-        pose_ax_size.zero();
-        pose_vtk_actor = vtkSmartPointer<vtkAxesActor>::New();
-        pose_vtk_transform = vtkSmartPointer<vtkTransform>::New();
-    }
-
-    //  methods to be defined
-    bool setHomogeneousTransform(const Matrix &rotation, const Vector &translation)
-    {
-        //  set the 4x4 homogeneous transform given 3x3 rotation and 1x3 translation
-        if (rotation.cols() == 3 && rotation.rows() == 3 && translation.size() == 3)
-        {
-            pose_transform.setSubmatrix(rotation, 0, 0);
-            pose_transform.setSubcol(translation, 0, 3);
-            return true;
-        }
-        else
-            return false;
-    }
-
-    void setvtkTransform(const Matrix &transform)
-    {
-        vtkSmartPointer<vtkMatrix4x4> m_vtk = vtkSmartPointer<vtkMatrix4x4>::New();
-        m_vtk->Zero();
-        for (size_t i = 0; i < 4; i++)
-        {
-            for(size_t j = 0; j < 4; j++)
-            {
-                m_vtk->SetElement(i, j, transform(i, j));
-            }
-        }
-
-        pose_vtk_transform->SetMatrix(m_vtk);
-    }
-
-
-};
 
 /****************************************************************/
 
@@ -170,7 +119,12 @@ class GraspProcessorModule : public RFModule
 
     bool closing;
 
+    string hand;
     WhichHand grasping_hand;
+
+    //  client for cartesian interface
+    PolyDriver arm_client;
+    ICartesianControl *icart;
 
     //  visualization objects
     unique_ptr<Points> vtk_points;
@@ -196,19 +150,24 @@ class GraspProcessorModule : public RFModule
     bool configure(ResourceFinder &rf) override
     {
 
-        moduleName = rf.check("name", Value("graspProcessor")).asString();
+        moduleName = rf.check("name", Value("graspProcessor")).toString();
+        hand = rf.check("hand", Value("right")).toString();
+
+        Property optionArm;
+        optionArm.put("device", "cartesiancontrollerclient");
 
         //  parse for grasping hand
-        if (rf.check("hand"))
+        if (hand == "right")
         {
-            if (rf.find("hand").asString() == "right")
-            {
-                grasping_hand = WhichHand::HAND_RIGHT;
-            }
-            else if (rf.find("hand").asString() == "left")
-            {
-                grasping_hand = WhichHand::HAND_LEFT;
-            }
+            grasping_hand = WhichHand::HAND_RIGHT;
+            optionArm.put("remote", "/icubSim/cartesianController/right_arm");
+            optionArm.put("local", "/" + moduleName + "/cartesianClient/right_arm");
+        }
+        else
+        {
+            grasping_hand = WhichHand::HAND_LEFT;
+            optionArm.put("remote", "/icubSim/cartesianController/left_arm");
+            optionArm.put("local", "/" + moduleName + "/cartesianClient/left_arm");
         }
 
         //  open the necessary ports
@@ -216,6 +175,11 @@ class GraspProcessorModule : public RFModule
         point_cloud_rpc.open("/" + moduleName + "/pointCloud:rpc");
         action_render_rpc.open("/" + moduleName + "/actionRenderer:rpc");
         module_rpc.open("/" + moduleName + "/cmd:rpc");
+
+        //  open client and view
+        if(!arm_client.open(optionArm))
+            return false;
+        arm_client.view(icart);
 
         //  attach callback
         attach(module_rpc);
@@ -312,6 +276,7 @@ class GraspProcessorModule : public RFModule
         point_cloud_rpc.close();
         action_render_rpc.close();
         module_rpc.close();
+        arm_client.close();
 
         return true;
 
@@ -548,13 +513,51 @@ class GraspProcessorModule : public RFModule
          */
 
         bool ok1, ok2, ok3, ok4;
-        yDebug() << candidate_pose.pose_transform.toString();
         ok1 = candidate_pose.pose_transform(2, 3) - palm_width_y/2 > table_height_z;
         ok2 = candidate_pose.pose_ax_size(0) * 2 < grasp_width_x;
         ok3 = candidate_pose.pose_ax_size(1) * 2 > palm_width_y;
         ok4 = dot(candidate_pose.pose_transform.subcol(0, 1, 3), root_z_axis) <= 0.3;
 
         return (ok1 && ok2 && ok3 && ok4);
+    }
+
+    /****************************************************************/
+    void getPoseCostFunction(GraspPose &candidate_pose)
+    {
+        //  compute precision for movement
+        double cost_function = 0.0;
+
+        using namespace yarp::math;
+
+        Vector x_d = candidate_pose.pose_translation;
+        Vector o_d = dcm2axis(candidate_pose.pose_rotation);
+        Vector x_d_hat, o_d_hat, q_d_hat;
+
+        icart->setPosePriority("position");
+        icart->askForPose(x_d, o_d, x_d_hat, o_d_hat, q_d_hat);
+
+        yDebug() << "Requested: " << candidate_pose.pose_transform.toString();
+
+        //  calculate cost function
+        double cost_position = norm(x_d - x_d_hat);
+
+        Matrix tmp = axis2dcm(o_d_hat).submatrix(0,2, 0,2);
+
+        yDebug() << "Obtained pose: " << tmp.toString();
+        yDebug() << "Obtained position: " << x_d_hat.toString();
+
+        Matrix orientation_error_matrix =  candidate_pose.pose_rotation * tmp.transposed();
+        Vector orientation_error_vector = dcm2axis(orientation_error_matrix);
+
+        double cost_orientation = norm(orientation_error_vector * sin(orientation_error_vector(3)));
+
+        cost_function = cost_position + cost_orientation;
+
+        //  set cost function of the pose
+        candidate_pose.pose_cost_function = cost_function;
+
+        yDebug() << "Cost function: " << cost_function;
+
     }
 
     /****************************************************************/
@@ -567,6 +570,7 @@ class GraspProcessorModule : public RFModule
         for (GraspPose grasp_pose : pose_candidates)
         {
             vtk_renderer->RemoveActor(grasp_pose.pose_vtk_actor);
+            vtk_renderer->RemoveActor(grasp_pose.pose_vtk_caption_actor);
         }
 
         //  get superquadric parameters
@@ -577,7 +581,7 @@ class GraspProcessorModule : public RFModule
 
         //  get orientation of the superq in 3x3 rotation matrix form
         using namespace yarp::math;
-        superq_XYZW_orientation(3) /= (180 / M_PI);
+        superq_XYZW_orientation(3) /= (180.0 / M_PI);
         Matrix superq_mat_orientation = axis2dcm(superq_XYZW_orientation).submatrix(0,2, 0,2);
 
         //  columns of rotation matrix are superq axes direction
@@ -639,13 +643,20 @@ class GraspProcessorModule : public RFModule
                         candidate_pose.setvtkTransform(candidate_pose.pose_transform);
                         candidate_pose.pose_vtk_actor->SetUserTransform(candidate_pose.pose_vtk_transform);
 
+                        //  calculate the cost function for the pose
+                        getPoseCostFunction(candidate_pose);
+
                         //  fix graphical properties
                         candidate_pose.pose_vtk_actor->AxisLabelsOff();
                         candidate_pose.pose_vtk_actor->SetTotalLength(0.02, 0.02, 0.02);
+                        candidate_pose.setvtkActorCaption(to_string(candidate_pose.pose_cost_function));
 
                         //  add actor to renderer
                         vtk_renderer->AddActor(candidate_pose.pose_vtk_actor);
+                        vtk_renderer->AddActor(candidate_pose.pose_vtk_caption_actor);
                         pose_candidates.push_back(candidate_pose);
+
+
                     }
                 }
             }
@@ -675,6 +686,11 @@ class GraspProcessorModule : public RFModule
         if (pose_candidates.size())
         {
             best_candidate = pose_candidates[0];
+            for (GraspPose candidate : pose_candidates)
+            {
+                best_candidate = (candidate.pose_cost_function < best_candidate.pose_cost_function ? candidate : best_candidate);
+            }
+
             LockGuard lg(mutex);
             vtk_renderer->RemoveActor(best_candidate.pose_vtk_actor);
             best_candidate.pose_vtk_actor->SetTotalLength(0.06, 0.06, 0.06);
@@ -685,7 +701,7 @@ class GraspProcessorModule : public RFModule
 
     }
 
-
+    /****************************************************************/
 
 public:
     GraspProcessorModule(): closing(false), table_height_z(-0.15), palm_width_y(0.06), grasp_width_x(0.1), grasping_hand(WhichHand::HAND_RIGHT)  {}

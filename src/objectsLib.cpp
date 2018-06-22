@@ -30,6 +30,9 @@
 #include <vtkCamera.h>
 #include <vtkInteractorStyleSwitch.h>
 #include <vtkMatrix4x4.h>
+#include <vtkCaptionActor2D.h>
+#include <vtkTextActor.h>
+#include <vtkTextProperty.h>
 
 #include <yarp/sig/all.h>
 #include <yarp/math/Math.h>
@@ -38,8 +41,6 @@
 
 using namespace std;
 using namespace yarp::sig;
-
-
 
 /****************************************************************/
 vtkSmartPointer<vtkActor> &Object::get_actor()
@@ -74,7 +75,7 @@ void Points::set_points(const PointCloud<DataXYZRGBA> &points)
 {
     vtk_points=vtkSmartPointer<vtkPoints>::New();
     for (size_t i=0; i<points.size(); i++)
-        vtk_points->InsertNextPoint(points(i).x, points(i).y, points(i).z);
+        vtk_points->InsertNextPoint(static_cast<double>(points(i).x), static_cast<double>(points(i).y), static_cast<double>(points(i).z));
 
     vtk_polydata->SetPoints(vtk_points);
 }
@@ -219,7 +220,7 @@ Vector Superquadric::getOrientationXYZW()
 }
 
 /****************************************************************/
-GraspPose::GraspPose()
+GraspPose::GraspPose() : pose_transform(4,4), pose_rotation(3,3), pose_translation(3), pose_ax_size(3)
 {
     pose_transform.eye();
     pose_rotation.eye();
@@ -227,6 +228,7 @@ GraspPose::GraspPose()
     pose_ax_size.zero();
     pose_vtk_actor = vtkSmartPointer<vtkAxesActor>::New();
     pose_vtk_transform = vtkSmartPointer<vtkTransform>::New();
+    pose_vtk_caption_actor = vtkSmartPointer<vtkCaptionActor2D>::New();
 }
 
 /****************************************************************/
@@ -257,6 +259,22 @@ void GraspPose::setvtkTransform(const Matrix &transform)
     }
 
     pose_vtk_transform->SetMatrix(m_vtk);
+}
+
+/****************************************************************/
+void GraspPose::setvtkActorCaption(const string &caption)
+{
+    pose_vtk_caption_actor->GetTextActor()->SetTextScaleModeToNone();
+    pose_vtk_caption_actor->SetCaption(caption.c_str());
+    pose_vtk_caption_actor->BorderOff();
+    pose_vtk_caption_actor->LeaderOn();
+    //pose_vtk_caption_actor->GetCaptionTextProperty()->SetColor(color.data());
+    pose_vtk_caption_actor->GetCaptionTextProperty()->SetFontSize(20);
+    pose_vtk_caption_actor->GetCaptionTextProperty()->FrameOff();
+    pose_vtk_caption_actor->GetCaptionTextProperty()->ShadowOff();
+    pose_vtk_caption_actor->GetCaptionTextProperty()->BoldOff();
+    pose_vtk_caption_actor->GetCaptionTextProperty()->ItalicOff();
+    pose_vtk_caption_actor->SetAttachmentPoint(pose_translation(0), pose_translation(1), pose_translation(2));
 }
 
 

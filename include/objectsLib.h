@@ -30,6 +30,9 @@
 #include <vtkCamera.h>
 #include <vtkInteractorStyleSwitch.h>
 #include <vtkMatrix4x4.h>
+#include <vtkCaptionActor2D.h>
+#include <vtkTextActor.h>
+#include <vtkTextProperty.h>
 
 #include <yarp/sig/all.h>
 #include <yarp/math/Math.h>
@@ -114,11 +117,13 @@ class GraspPose
 public:
     //  essential parameters for representing a grasping pose
     vtkSmartPointer<vtkAxesActor> pose_vtk_actor;
+    vtkSmartPointer<vtkCaptionActor2D> pose_vtk_caption_actor;
     vtkSmartPointer<vtkTransform> pose_vtk_transform;
     yarp::sig::Matrix pose_transform;
     yarp::sig::Matrix pose_rotation;
     yarp::sig::Vector pose_translation;
     yarp::sig::Vector pose_ax_size;
+    double pose_cost_function;
 
     /****************************************************************/
     GraspPose();
@@ -128,5 +133,8 @@ public:
 
     /****************************************************************/
     void setvtkTransform(const yarp::sig::Matrix &transform);
+
+    /****************************************************************/
+    void setvtkActorCaption(const std::string &caption);
 
 };
