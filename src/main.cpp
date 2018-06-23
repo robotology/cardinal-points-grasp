@@ -548,9 +548,9 @@ class GraspProcessorModule : public RFModule
         Matrix orientation_error_matrix =  candidate_pose.pose_rotation * tmp.transposed();
         Vector orientation_error_vector = dcm2axis(orientation_error_matrix);
 
-        double cost_orientation = norm(orientation_error_vector * sin(orientation_error_vector(3)));
+        double cost_orientation = norm(orientation_error_vector.subVector(0,2) * sin(orientation_error_vector(3)));
 
-        cost_function = cost_position + 2*cost_orientation;
+        cost_function = cost_position + cost_orientation;
 
         //  set cost function of the pose
         candidate_pose.pose_cost_function = cost_function;
