@@ -120,6 +120,7 @@ class GraspProcessorModule : public RFModule
     bool closing;
 
     string hand;
+    string robot;
     WhichHand grasping_hand;
 
     //  client for cartesian interface
@@ -152,6 +153,7 @@ class GraspProcessorModule : public RFModule
 
         moduleName = rf.check("name", Value("graspProcessor")).toString();
         hand = rf.check("hand", Value("right")).toString();
+        robot = (rf.check("sim")? "icubSim" : "icub");
 
         Property optionArm;
         optionArm.put("device", "cartesiancontrollerclient");
@@ -160,13 +162,14 @@ class GraspProcessorModule : public RFModule
         if (hand == "right")
         {
             grasping_hand = WhichHand::HAND_RIGHT;
-            optionArm.put("remote", "/icubSim/cartesianController/right_arm");
+            optionArm.put("remote", "/" + robot + "/cartesianController/right_arm");
             optionArm.put("local", "/" + moduleName + "/cartesianClient/right_arm");
         }
         else
         {
             grasping_hand = WhichHand::HAND_LEFT;
-            optionArm.put("remote", "/icubSim/cartesianController/left_arm");
+            //optionArm.put("remote", "/icubSim/cartesianController/left_arm");
+            optionArm.put("remote", "/" + robot + "/cartesianController/left_arm");
             optionArm.put("local", "/" + moduleName + "/cartesianClient/left_arm");
         }
 
