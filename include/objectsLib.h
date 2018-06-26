@@ -123,7 +123,7 @@ public:
     yarp::sig::Matrix pose_rotation;
     yarp::sig::Vector pose_translation;
     yarp::sig::Vector pose_ax_size;
-    double pose_cost_function;
+    yarp::sig::Vector pose_cost_function;
 
     /****************************************************************/
     GraspPose();
@@ -136,5 +136,8 @@ public:
 
     /****************************************************************/
     void setvtkActorCaption(const std::string &caption);
+
+    bool operator< (const GraspPose &otherPose) const;
+
 
 };

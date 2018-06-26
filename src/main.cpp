@@ -14,6 +14,7 @@
 #include <string>
 #include <vector>
 #include <cmath>
+#include <algorithm>
 
 #include <yarp/os/all.h>
 #include <yarp/sig/all.h>
@@ -168,7 +169,6 @@ class GraspProcessorModule : public RFModule
         else
         {
             grasping_hand = WhichHand::HAND_LEFT;
-            //optionArm.put("remote", "/icubSim/cartesianController/left_arm");
             optionArm.put("remote", "/" + robot + "/cartesianController/left_arm");
             optionArm.put("local", "/" + moduleName + "/cartesianClient/left_arm");
         }
@@ -367,8 +367,16 @@ class GraspProcessorModule : public RFModule
                 refreshPointCloud(pc);
                 requestRefreshSuperquadric(pc);
                 computeGraspCandidates();
-                getBestCandidatePose();
-                cmd_success = true;
+                if (pose_candidates.size())
+                {
+                    getBestCandidatePose();
+                    cmd_success = true;
+                }
+                else
+                {
+                    cmd_success = false;
+                }
+
             }
         }
 
@@ -528,8 +536,6 @@ class GraspProcessorModule : public RFModule
     void getPoseCostFunction(GraspPose &candidate_pose)
     {
         //  compute precision for movement
-        double cost_function = 0.0;
-
         using namespace yarp::math;
 
         Vector x_d = candidate_pose.pose_translation;
@@ -540,25 +546,19 @@ class GraspProcessorModule : public RFModule
 
         yDebug() << "Requested: " << candidate_pose.pose_transform.toString();
 
-        //  calculate cost function
-        double cost_position = norm(x_d - x_d_hat);
+        //  calculate position cost function (first component of cost function)
+        candidate_pose.pose_cost_function(0) = norm(x_d - x_d_hat);
 
+        //  calculate orientation cost function
         Matrix tmp = axis2dcm(o_d_hat).submatrix(0,2, 0,2);
-
-        yDebug() << "Obtained pose: " << tmp.toString();
-        yDebug() << "Obtained position: " << x_d_hat.toString();
-
         Matrix orientation_error_matrix =  candidate_pose.pose_rotation * tmp.transposed();
         Vector orientation_error_vector = dcm2axis(orientation_error_matrix);
 
-        double cost_orientation = norm(orientation_error_vector.subVector(0,2) * sin(orientation_error_vector(3)));
+        candidate_pose.pose_cost_function(1) = norm(orientation_error_vector.subVector(0,2) * sin(orientation_error_vector(3))) / norm(orientation_error_vector.subVector(0,2));
 
-        cost_function = cost_position + cost_orientation;
-
-        //  set cost function of the pose
-        candidate_pose.pose_cost_function = cost_function;
-
-        yDebug() << "Cost function: " << cost_function;
+//        yDebug() << "Obtained pose: " << tmp.toString();
+//        yDebug() << "Obtained position: " << x_d_hat.toString();
+        yDebug() << "Cost function: " << candidate_pose.pose_cost_function.toString();
 
     }
 
@@ -682,7 +682,7 @@ class GraspProcessorModule : public RFModule
                         candidate_pose.pose_vtk_actor->SetTotalLength(0.02, 0.02, 0.02);
 
                         stringstream ss;
-                        ss << fixed << setprecision(2) << candidate_pose.pose_cost_function;
+                        ss << fixed << setprecision(3) << candidate_pose.pose_cost_function(0);
                         candidate_pose.setvtkActorCaption(ss.str());
 
                         //  add actor to renderer
@@ -695,15 +695,15 @@ class GraspProcessorModule : public RFModule
             }
         }
 
-        yInfo() << "Object orientation: " << superq_mat_orientation.toString();
-        yInfo() << "Object center " << superq_center.toString();
-        yInfo() << "Object size: x " << 2*superq_axes_size(0) << " y " << 2*superq_axes_size(1) << " z " << 2*superq_axes_size(2);
+//        yInfo() << "Object orientation: " << superq_mat_orientation.toString();
+//        yInfo() << "Object center " << superq_center.toString();
+//        yInfo() << "Object size: x " << 2*superq_axes_size(0) << " y " << 2*superq_axes_size(1) << " z " << 2*superq_axes_size(2);
 
-        yInfo() << "Feasible grasp candidates computed: " << pose_candidates.size();
-        for (GraspPose o : pose_candidates)
-        {
-            yDebug() << o.pose_transform.toString();
-        }
+//        yInfo() << "Feasible grasp candidates computed: " << pose_candidates.size();
+//        for (GraspPose o : pose_candidates)
+//        {
+//            yDebug() << o.pose_transform.toString();
+//        }
 
         //  restore previous context
         icart->restoreContext(context_backup);
@@ -721,19 +721,28 @@ class GraspProcessorModule : public RFModule
 
         if (pose_candidates.size())
         {
+            //  sort poses based on < operator defined for GraspPose
+            //  from smallest to largest position error
+            sort(pose_candidates.begin(), pose_candidates.end());
+
             best_candidate = pose_candidates[0];
-            for (GraspPose candidate : pose_candidates)
+
+            //  select candidate with the best orientation precision
+            for(size_t idx = 1; (idx < pose_candidates.size()) && (pose_candidates[idx].pose_cost_function(0) < 0.01); idx++)
             {
-                best_candidate = (candidate.pose_cost_function < best_candidate.pose_cost_function ? candidate : best_candidate);
+                if (pose_candidates[idx].pose_cost_function(1) < best_candidate.pose_cost_function(1))
+                {
+                    best_candidate = pose_candidates[idx];
+                }
             }
 
+            //  display the best candidate
             LockGuard lg(mutex);
             vtk_renderer->RemoveActor(best_candidate.pose_vtk_actor);
             best_candidate.pose_vtk_actor->SetTotalLength(0.06, 0.06, 0.06);
             vtk_renderer->AddActor(best_candidate.pose_vtk_actor);
             yInfo() << "Best candidate: cartesian " << best_candidate.pose_translation.toString() << " pose " << yarp::math::dcm2axis(best_candidate.pose_rotation).toString();
-
-
+            yInfo() << "Cost: " << best_candidate.pose_cost_function.toString();
         }
         return best_candidate;
 

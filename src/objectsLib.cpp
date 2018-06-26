@@ -53,7 +53,7 @@ Points::Points(const PointCloud<DataXYZRGBA> &points, const int point_size)
 {
     vtk_points=vtkSmartPointer<vtkPoints>::New();
     for (size_t i=0; i<points.size(); i++)
-        vtk_points->InsertNextPoint(points(i).x, points(i).y, points(i).z);
+        vtk_points->InsertNextPoint(static_cast<double>(points(i).x), static_cast<double>(points(i).y), static_cast<double>(points(i).z));
 
     vtk_polydata=vtkSmartPointer<vtkPolyData>::New();
     vtk_polydata->SetPoints(vtk_points);
@@ -220,8 +220,9 @@ Vector Superquadric::getOrientationXYZW()
 }
 
 /****************************************************************/
-GraspPose::GraspPose() : pose_transform(4,4), pose_rotation(3,3), pose_translation(3), pose_ax_size(3)
+GraspPose::GraspPose() : pose_cost_function(2), pose_transform(4,4), pose_rotation(3,3), pose_translation(3), pose_ax_size(3)
 {
+    pose_cost_function.zero();
     pose_transform.eye();
     pose_rotation.eye();
     pose_translation.zero();
@@ -277,5 +278,10 @@ void GraspPose::setvtkActorCaption(const string &caption)
     pose_vtk_caption_actor->SetAttachmentPoint(pose_translation(0), pose_translation(1), pose_translation(2));
 }
 
+/****************************************************************/
+bool GraspPose::operator< (const GraspPose &otherPose) const
+{
+    return pose_cost_function(0) < otherPose.pose_cost_function(0);
+}
 
 
