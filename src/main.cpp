@@ -303,8 +303,8 @@ class GraspProcessorModule : public RFModule
                 if (requestRefreshSuperquadric(pc))
                 {
                     computeGraspCandidates();
-                    getBestCandidatePose();
-                    cmd_success = true;
+                    GraspPose best_pose;
+                    cmd_success = getBestCandidatePose(best_pose);
                 }
             }
         }
@@ -369,8 +369,8 @@ class GraspProcessorModule : public RFModule
                 computeGraspCandidates();
                 if (pose_candidates.size())
                 {
-                    getBestCandidatePose();
-                    cmd_success = true;
+                    GraspPose best_pose;
+                    cmd_success = getBestCandidatePose(best_pose);
                 }
                 else
                 {
@@ -593,9 +593,9 @@ class GraspProcessorModule : public RFModule
         yInfo() << "Torso current pitch limits: min " << min_torso_pitch << " max " << max_torso_pitch;
         yInfo() << "Torso current roll limits: min " << min_torso_roll << " max " << max_torso_roll;
         yInfo() << "Torso current yaw limits: min " << min_torso_yaw << " max " << max_torso_yaw;
-        icart -> setLimits(0, min_torso_pitch, max_torso_pitch);
-        icart -> setLimits(1, min_torso_roll, max_torso_roll);
-        icart -> setLimits(2, min_torso_yaw, max_torso_yaw);
+//        icart -> setLimits(0, min_torso_pitch, max_torso_pitch);
+//        icart -> setLimits(1, min_torso_roll, max_torso_roll);
+//        icart -> setLimits(2, min_torso_yaw, max_torso_yaw);
 
         //  detach vtk actors corresponding to poses, if any are present
         for (GraspPose grasp_pose : pose_candidates)
@@ -713,11 +713,9 @@ class GraspProcessorModule : public RFModule
     }
 
     /****************************************************************/
-    GraspPose getBestCandidatePose()
+    bool getBestCandidatePose(GraspPose &best_candidate)
     {
-        //  compute which is the best
-        //  bogus lol
-        GraspPose best_candidate;
+        //  compute which is the best pose wrt cost function
 
         if (pose_candidates.size())
         {
@@ -725,15 +723,22 @@ class GraspProcessorModule : public RFModule
             //  from smallest to largest position error
             sort(pose_candidates.begin(), pose_candidates.end());
 
-            best_candidate = pose_candidates[0];
-
             //  select candidate with the best orientation precision
-            for(size_t idx = 1; (idx < pose_candidates.size()) && (pose_candidates[idx].pose_cost_function(0) < 0.01); idx++)
+            //  precision of less than 1 cm is not accepted
+            if (pose_candidates[0].pose_cost_function(0) < 0.01)
             {
-                if (pose_candidates[idx].pose_cost_function(1) < best_candidate.pose_cost_function(1))
+                best_candidate = pose_candidates[0];
+                for(size_t idx = 1; (idx < pose_candidates.size()) && (pose_candidates[idx].pose_cost_function(0) < 0.01); idx++)
                 {
-                    best_candidate = pose_candidates[idx];
+                    if (pose_candidates[idx].pose_cost_function(1) < best_candidate.pose_cost_function(1))
+                    {
+                        best_candidate = pose_candidates[idx];
+                    }
                 }
+            }
+            else
+            {
+                return false;
             }
 
             //  display the best candidate
@@ -743,15 +748,19 @@ class GraspProcessorModule : public RFModule
             vtk_renderer->AddActor(best_candidate.pose_vtk_actor);
             yInfo() << "Best candidate: cartesian " << best_candidate.pose_translation.toString() << " pose " << yarp::math::dcm2axis(best_candidate.pose_rotation).toString();
             yInfo() << "Cost: " << best_candidate.pose_cost_function.toString();
+            return true;
         }
-        return best_candidate;
+        else
+        {
+            return false;
+        }
 
     }
 
     /****************************************************************/
 
 public:
-    GraspProcessorModule(): closing(false), table_height_z(-0.15), palm_width_y(0.06), grasp_width_x(0.1), grasping_hand(WhichHand::HAND_RIGHT)  {}
+    GraspProcessorModule(): closing(false), table_height_z(-0.148), palm_width_y(0.08), grasp_width_x(0.1), grasping_hand(WhichHand::HAND_RIGHT)  {}
 
 };
 
