@@ -137,6 +137,10 @@ public:
     /****************************************************************/
     void setvtkActorCaption(const std::string &caption);
 
+    /****************************************************************/
+    yarp::sig::Vector getPose();
+
+    /****************************************************************/
     bool operator< (const GraspPose &otherPose) const;
 
 

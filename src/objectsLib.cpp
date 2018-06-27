@@ -279,6 +279,23 @@ void GraspPose::setvtkActorCaption(const string &caption)
 }
 
 /****************************************************************/
+yarp::sig::Vector GraspPose::getPose()
+{
+    //  Return the pose in vector format
+    //  x y z gx gy gz theta(radians)
+    Vector pose(7, 0.0);
+
+    //  set x y z
+    pose.setSubvector(0, pose_translation);
+
+    //  set axis-angle representation of orientation
+    pose.setSubvector(3, yarp::math::dcm2axis(pose_rotation));
+
+    return pose;
+
+}
+
+/****************************************************************/
 bool GraspPose::operator< (const GraspPose &otherPose) const
 {
     return pose_cost_function(0) < otherPose.pose_cost_function(0);
