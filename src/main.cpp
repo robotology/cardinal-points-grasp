@@ -325,7 +325,7 @@ class GraspProcessorModule : public RFModule
             }
         }
 
-        if (command.get(1).toString() == "grasp")
+        if (command.get(0).toString() == "grasp")
         {
             //  obtain grasp and render it
             if (command.size() == 3)
@@ -620,7 +620,7 @@ class GraspProcessorModule : public RFModule
         candidate_pose.pose_cost_function(1) = norm(orientation_error_vector.subVector(0,2) * sin(orientation_error_vector(3))) / norm(orientation_error_vector.subVector(0,2));
 
 
-        candidate_pose.pose_cost_function(1) = 0.8*candidate_pose.pose_cost_function(1) + 0.2*(1-candidate_pose.pose_ax_size(1)/yarp::math::findMax(candidate_pose.pose_ax_size));
+        candidate_pose.pose_cost_function(1) = 0.5*candidate_pose.pose_cost_function(1) + 0.5*(1-candidate_pose.pose_ax_size(1)/yarp::math::findMax(candidate_pose.pose_ax_size));
 
         yDebug() << "Cost function: " << candidate_pose.pose_cost_function.toString();
 
