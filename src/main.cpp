@@ -126,8 +126,8 @@ class GraspProcessorModule : public RFModule
     WhichHand grasping_hand;
 
     //  client for cartesian interface
-    PolyDriver arm_client;
-    ICartesianControl *icart;
+    PolyDriver left_arm_client, right_arm_client;
+    ICartesianControl *icart_left, *icart_right;
 
     //  visualization objects
     unique_ptr<Points> vtk_points;
@@ -157,22 +157,15 @@ class GraspProcessorModule : public RFModule
         hand = rf.check("hand", Value("right")).toString();
         robot = (rf.check("sim")? "icubSim" : "icub");
 
-        Property optionArm;
-        optionArm.put("device", "cartesiancontrollerclient");
+        Property optionLeftArm, optionRightArm;
 
-        //  parse for grasping hand
-        if (hand == "right")
-        {
-            grasping_hand = WhichHand::HAND_RIGHT;
-            optionArm.put("remote", "/" + robot + "/cartesianController/right_arm");
-            optionArm.put("local", "/" + moduleName + "/cartesianClient/right_arm");
-        }
-        else
-        {
-            grasping_hand = WhichHand::HAND_LEFT;
-            optionArm.put("remote", "/" + robot + "/cartesianController/left_arm");
-            optionArm.put("local", "/" + moduleName + "/cartesianClient/left_arm");
-        }
+        optionLeftArm.put("device", "cartesiancontrollerclient");
+        optionLeftArm.put("remote", "/" + robot + "/cartesianController/left_arm");
+        optionLeftArm.put("local", "/" + moduleName + "/cartesianClient/left_arm");
+
+        optionRightArm.put("device", "cartesiancontrollerclient");
+        optionRightArm.put("remote", "/" + robot + "/cartesianController/right_arm");
+        optionRightArm.put("local", "/" + moduleName + "/cartesianClient/right_arm");
 
         //  open the necessary ports
         superq_rpc.open("/" + moduleName + "/superquadricRetrieve:rpc");
@@ -182,9 +175,10 @@ class GraspProcessorModule : public RFModule
         module_rpc.open("/" + moduleName + "/cmd:rpc");
 
         //  open client and view
-        if(!arm_client.open(optionArm))
+        if(!(left_arm_client.open(optionLeftArm) && right_arm_client.open(optionRightArm)))
             return false;
-        arm_client.view(icart);
+        left_arm_client.view(icart_left);
+        right_arm_client.view(icart_right);
 
         //  attach callback
         attach(module_rpc);
@@ -283,7 +277,7 @@ class GraspProcessorModule : public RFModule
         action_render_rpc.close();
         reach_calib_rpc.close();
         module_rpc.close();
-        arm_client.close();
+        left_arm_client.close();
 
         return true;
 
@@ -309,6 +303,25 @@ class GraspProcessorModule : public RFModule
                 {
                     cmd_success = computeGraspPose(grasp_pose);
                     yInfo() << "Pose retrieved: " << grasp_pose.toString();
+                }
+            }
+        }
+
+        if (command.check("grasp"))
+        {
+            //  obtain grasp and render it
+            string obj = command.find("grasp_pose").asString();
+            PointCloud<DataXYZRGBA> pc;
+            yDebug() << "Requested object: " << obj;
+            if (requestRefreshPointCloud(pc, obj))
+            {
+                if (requestRefreshSuperquadric(pc))
+                {
+                    if (computeGraspPose(grasp_pose))
+                    {
+                        yInfo() << "Pose retrieved: " << grasp_pose.toString();
+                        cmd_success = executeGrasp(grasp_pose);
+                    }
                 }
             }
         }
@@ -650,18 +663,9 @@ class GraspProcessorModule : public RFModule
                     candidate_pose.pose_ax_size(1) = superq_axes_size(jdx/2);
                     candidate_pose.pose_ax_size(2) = superq_axes_size(3 - idx/2 - jdx/2);
 
-                    //  translate along gz according to superquadric size
-                    //  minus sign, since we are using right hand
-                    //  left hand would have plus sign
-//                    if (grasping_hand == WhichHand::HAND_RIGHT)
-//                    {
-//                        candidate_pose.pose_translation = superq_center - (palm_width_y/3 + candidate_pose.pose_ax_size(2)) * gz/norm(gz) - palm_width_y/2 * gx/norm(gx);
-//                    }
-//                    else if (grasping_hand == WhichHand::HAND_LEFT)
-//                    {
-//                        candidate_pose.pose_translation = superq_center + (palm_width_y/3 + candidate_pose.pose_ax_size(2)) * gz/norm(gz) - palm_width_y/2 * gx/norm(gx);
-//                    }
-
+                    //  translate the pose along gz and gx according to the palm size
+                    //  rotate the pose around the hand y axis
+                    //  sign of operations depends upon the hand we are using
 
                     if (grasping_hand == WhichHand::HAND_RIGHT)
                     {
@@ -833,6 +837,19 @@ class GraspProcessorModule : public RFModule
         }
 
         return success;
+    }
+
+    /****************************************************************/
+    bool executeGrasp(Vector &pose)
+    {
+        //  communication with actionRenderingEngine/cmd:io
+
+        //  grasp(x y z gx gy gz theta) ("approach" (-0.05 0 +-0.05 0.0)) "left"/"right"
+
+
+
+
+        return true;
     }
 
 
