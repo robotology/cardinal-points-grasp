@@ -116,6 +116,7 @@ class GraspProcessorModule : public RFModule
     RpcClient superq_rpc;
     RpcClient point_cloud_rpc;
     RpcClient action_render_rpc;    //not used atm
+    RpcClient reach_calib_rpc;
     RpcServer module_rpc;   //will be replaced by idl services
 
     bool closing;
@@ -177,6 +178,7 @@ class GraspProcessorModule : public RFModule
         superq_rpc.open("/" + moduleName + "/superquadricRetrieve:rpc");
         point_cloud_rpc.open("/" + moduleName + "/pointCloud:rpc");
         action_render_rpc.open("/" + moduleName + "/actionRenderer:rpc");
+        reach_calib_rpc.open("/" + moduleName + "/reachingCalibration:rpc");
         module_rpc.open("/" + moduleName + "/cmd:rpc");
 
         //  open client and view
@@ -265,6 +267,7 @@ class GraspProcessorModule : public RFModule
         superq_rpc.interrupt();
         point_cloud_rpc.interrupt();
         action_render_rpc.interrupt();
+        reach_calib_rpc.interrupt();
         module_rpc.interrupt();
         closing = true;
 
@@ -278,6 +281,7 @@ class GraspProcessorModule : public RFModule
         superq_rpc.close();
         point_cloud_rpc.close();
         action_render_rpc.close();
+        reach_calib_rpc.close();
         module_rpc.close();
         arm_client.close();
 
@@ -291,20 +295,20 @@ class GraspProcessorModule : public RFModule
         //  parse for available commands
 
         bool cmd_success = false;
+        Vector grasp_pose(7, 0.0);
 
         if (command.check("grasp_pose"))
         {
             //  normal operation
             string obj = command.find("grasp_pose").asString();
             PointCloud<DataXYZRGBA> pc;
-            yDebug() << "Requested object: " << obj;
+            yDebug() << "Requested object: " << obj;          
             if (requestRefreshPointCloud(pc, obj))
             {
                 if (requestRefreshSuperquadric(pc))
                 {
-                    computeGraspCandidates();
-                    GraspPose best_pose;
-                    cmd_success = getBestCandidatePose(best_pose);
+                    cmd_success = computeGraspPose(grasp_pose);
+                    yInfo() << "Pose retrieved: " << grasp_pose.toString();
                 }
             }
         }
@@ -365,22 +369,18 @@ class GraspProcessorModule : public RFModule
             if (pc.size() > 0)
             {
                 refreshPointCloud(pc);
-                requestRefreshSuperquadric(pc);
-                computeGraspCandidates();
-                if (pose_candidates.size())
+                if (requestRefreshSuperquadric(pc))
                 {
-                    GraspPose best_pose;
-                    cmd_success = getBestCandidatePose(best_pose);
+                    cmd_success = computeGraspPose(grasp_pose);
+                    yInfo() << "Pose retrieved: " << grasp_pose.toString();
                 }
-                else
-                {
-                    cmd_success = false;
-                }
-
             }
         }
 
         reply.addVocab(Vocab::encode(cmd_success ? "ack":"nack"));
+
+
+
         return true;
 
     }
@@ -526,8 +526,8 @@ class GraspProcessorModule : public RFModule
         bool ok1, ok2, ok3, ok4;
         ok1 = candidate_pose.pose_transform(2, 3) - palm_width_y/2 > table_height_z;
         ok2 = candidate_pose.pose_ax_size(0) * 2 < grasp_width_x;
-        ok3 = candidate_pose.pose_ax_size(1) * 2 > palm_width_y;
-        ok4 = dot(candidate_pose.pose_transform.subcol(0, 1, 3), root_z_axis) <= 0.3;
+        ok3 = candidate_pose.pose_ax_size(1) * 2 > palm_width_y/2;
+        ok4 = dot(candidate_pose.pose_transform.subcol(0, 1, 3), root_z_axis) <= 0.1;
 
         return (ok1 && ok2 && ok3 && ok4);
     }
@@ -653,14 +653,35 @@ class GraspProcessorModule : public RFModule
                     //  translate along gz according to superquadric size
                     //  minus sign, since we are using right hand
                     //  left hand would have plus sign
+//                    if (grasping_hand == WhichHand::HAND_RIGHT)
+//                    {
+//                        candidate_pose.pose_translation = superq_center - (palm_width_y/3 + candidate_pose.pose_ax_size(2)) * gz/norm(gz) - palm_width_y/2 * gx/norm(gx);
+//                    }
+//                    else if (grasping_hand == WhichHand::HAND_LEFT)
+//                    {
+//                        candidate_pose.pose_translation = superq_center + (palm_width_y/3 + candidate_pose.pose_ax_size(2)) * gz/norm(gz) - palm_width_y/2 * gx/norm(gx);
+//                    }
+
+
                     if (grasping_hand == WhichHand::HAND_RIGHT)
                     {
-                        candidate_pose.pose_translation = superq_center - candidate_pose.pose_ax_size(2) * gz/norm(gz);
+                        double angle = -M_PI/4;
+                        Vector y_rotation_transform(4, 0.0);
+                        y_rotation_transform(1) = 1.0;
+                        y_rotation_transform(3) = angle;
+                        candidate_pose.pose_rotation = candidate_pose.pose_rotation * yarp::math::axis2dcm(y_rotation_transform).submatrix(0, 2, 0, 2);
+                        candidate_pose.pose_translation = superq_center - (palm_width_y/4 + candidate_pose.pose_ax_size(2)) * gz/norm(gz) - palm_width_y/4 * gx/norm(gx);
                     }
-                    else if (grasping_hand == WhichHand::HAND_LEFT)
+                    else
                     {
-                        candidate_pose.pose_translation = superq_center + candidate_pose.pose_ax_size(2) * gz/norm(gz);
+                        double angle = M_PI/4;
+                        Vector y_rotation_transform(4, 0.0);
+                        y_rotation_transform(1) = 1.0;
+                        y_rotation_transform(3) = angle;
+                        candidate_pose.pose_rotation = candidate_pose.pose_rotation * yarp::math::axis2dcm(y_rotation_transform).submatrix(0, 2, 0, 2);
+                        candidate_pose.pose_translation = superq_center - (palm_width_y/4 + candidate_pose.pose_ax_size(2)) * gz/norm(gz) - palm_width_y/4 * gx/norm(gx);
                     }
+
 
                     if (!candidate_pose.setHomogeneousTransform(candidate_pose.pose_rotation, candidate_pose.pose_translation))
                     {
@@ -758,9 +779,66 @@ class GraspProcessorModule : public RFModule
     }
 
     /****************************************************************/
+    bool fixReachingOffset(const Vector &poseToFix, Vector &poseFixed)
+    {
+        //  fix the pose offset accordint to iolReachingCalibration
+        //  pose is supposed to be (x y z gx gy gz theta)
+        Bottle command, reply;
+
+        command.addString("get_location_nolook");
+        if (grasping_hand == WhichHand::HAND_LEFT)
+        {
+            command.addString("iol-left");
+        }
+        else
+        {
+            command.addString("iol-right");
+        }
+
+        command.addDouble(poseToFix(0));    //  x value
+        command.addDouble(poseToFix(1));    //  y value
+        command.addDouble(poseToFix(2));    //  z value
+
+        reach_calib_rpc.write(command, reply);
+
+        //  incoming reply is going to be (success x y z)
+        if (reply.get(0).asString() == "ok")
+        {
+            poseFixed = poseToFix;
+            poseFixed(0) = reply.get(1).asDouble();
+            poseFixed(1) = reply.get(2).asDouble();
+            poseFixed(3) = reply.get(3).asDouble();
+            return true;
+        }
+        else
+        {
+            yError() << "Failure retrieving fixed pose";
+            return false;
+        }
+    }
+
+    /****************************************************************/
+    bool computeGraspPose(Vector &pose)
+    {
+        //  execute the pose computation pipeline
+        bool success = false;
+
+        //  if anything goes wrong, the operation fails and the function
+        //  returns a failure
+        computeGraspCandidates();
+        GraspPose best_pose;
+        if(getBestCandidatePose(best_pose))
+        {
+            success = fixReachingOffset(best_pose.getPose(), pose);
+        }
+
+        return success;
+    }
+
+
 
 public:
-    GraspProcessorModule(): closing(false), table_height_z(-0.148), palm_width_y(0.08), grasp_width_x(0.1), grasping_hand(WhichHand::HAND_RIGHT)  {}
+    GraspProcessorModule(): closing(false), table_height_z(-0.1487), palm_width_y(0.08), grasp_width_x(0.1), grasping_hand(WhichHand::HAND_RIGHT)  {}
 
 };
 
