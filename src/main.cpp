@@ -127,7 +127,7 @@ class GraspProcessorModule : public RFModule
 
     //  client for cartesian interface
     PolyDriver left_arm_client, right_arm_client;
-    ICartesianControl *icart_left, *icart_right;
+    ICartesianControl *icart;
 
     //  visualization objects
     unique_ptr<Points> vtk_points;
@@ -177,8 +177,6 @@ class GraspProcessorModule : public RFModule
         //  open client and view
         if(!(left_arm_client.open(optionLeftArm) && right_arm_client.open(optionRightArm)))
             return false;
-        left_arm_client.view(icart_left);
-        right_arm_client.view(icart_right);
 
         //  attach callback
         attach(module_rpc);
@@ -278,6 +276,7 @@ class GraspProcessorModule : public RFModule
         reach_calib_rpc.close();
         module_rpc.close();
         left_arm_client.close();
+        right_arm_client.close();
 
         return true;
 
@@ -290,11 +289,30 @@ class GraspProcessorModule : public RFModule
 
         bool cmd_success = false;
         Vector grasp_pose(7, 0.0);
+        string obj;
+        string hand;
 
-        if (command.check("grasp_pose"))
+        if (command.get(0).toString() == "grasp_pose")
         {
             //  normal operation
-            string obj = command.find("grasp_pose").asString();
+            if (command.size() == 3)
+            {
+                obj = command.get(1).toString();
+                hand = command.get(2).toString();
+                if (hand == "right")
+                {
+                    grasping_hand = WhichHand::HAND_RIGHT;
+                }
+                else if (hand == "left")
+                {
+                    grasping_hand = WhichHand::HAND_LEFT;
+                }
+                else
+                {
+                    reply.addVocab(Vocab::encode("nack"));
+                    return true;
+                }
+            }
             PointCloud<DataXYZRGBA> pc;
             yDebug() << "Requested object: " << obj;          
             if (requestRefreshPointCloud(pc, obj))
@@ -307,10 +325,27 @@ class GraspProcessorModule : public RFModule
             }
         }
 
-        if (command.check("grasp"))
+        if (command.get(1).toString() == "grasp")
         {
             //  obtain grasp and render it
-            string obj = command.find("grasp_pose").asString();
+            if (command.size() == 3)
+            {
+                obj = command.get(1).toString();
+                hand = command.get(2).toString();
+                if (hand == "right")
+                {
+                    grasping_hand = WhichHand::HAND_RIGHT;
+                }
+                else if (hand == "left")
+                {
+                    grasping_hand = WhichHand::HAND_LEFT;
+                }
+                else
+                {
+                    reply.addVocab(Vocab::encode("nack"));
+                    return true;
+                }
+            }
             PointCloud<DataXYZRGBA> pc;
             yDebug() << "Requested object: " << obj;
             if (requestRefreshPointCloud(pc, obj))
@@ -326,10 +361,28 @@ class GraspProcessorModule : public RFModule
             }
         }
 
-        if (command.check("from_off_file"))
+        if (command.get(0).toString() == "from_off_file")
         {
             //  process point cloud from file and perform candidate ranking
-            string filename = command.find("from_off_file").asString();
+            if (command.size() == 3)
+            {
+                obj = command.get(1).toString();
+                hand = command.get(2).toString();
+                if (hand == "right")
+                {
+                    grasping_hand = WhichHand::HAND_RIGHT;
+                }
+                else if (hand == "left")
+                {
+                    grasping_hand = WhichHand::HAND_LEFT;
+                }
+                else
+                {
+                    reply.addVocab(Vocab::encode("nack"));
+                    return true;
+                }
+            }
+            string filename = command.get(1).toString();
             //  load point cloud from .off file, store it and refresh point cloud, request and refresh superquadric and compute poses
             PointCloud<DataXYZRGBA> pc;
 
@@ -343,7 +396,6 @@ class GraspProcessorModule : public RFModule
             }
 
             //  parse the OFF file line by line
-
             string line;
             getline(file, line);
             if (line != "COFF")
@@ -391,8 +443,6 @@ class GraspProcessorModule : public RFModule
         }
 
         reply.addVocab(Vocab::encode(cmd_success ? "ack":"nack"));
-
-
 
         return true;
 
@@ -569,8 +619,6 @@ class GraspProcessorModule : public RFModule
 
         candidate_pose.pose_cost_function(1) = norm(orientation_error_vector.subVector(0,2) * sin(orientation_error_vector(3))) / norm(orientation_error_vector.subVector(0,2));
 
-//        yDebug() << "Obtained pose: " << tmp.toString();
-//        yDebug() << "Obtained position: " << x_d_hat.toString();
         yDebug() << "Cost function: " << candidate_pose.pose_cost_function.toString();
 
     }
@@ -580,6 +628,20 @@ class GraspProcessorModule : public RFModule
     {
         //  compute a series of viable grasp candidates according to superquadric parameters
         LockGuard lg(mutex);
+
+        if (grasping_hand == WhichHand::HAND_LEFT)
+        {
+            left_arm_client.view(icart);
+        }
+        else if (grasping_hand == WhichHand::HAND_RIGHT)
+        {
+            right_arm_client.view(icart);
+        }
+        else
+        {
+            yError() << "Invalid arm!";
+            return;
+        }
 
         //  store the context for the previous iKinCartesianController config
         int context_backup;
@@ -683,7 +745,7 @@ class GraspProcessorModule : public RFModule
                         y_rotation_transform(1) = 1.0;
                         y_rotation_transform(3) = angle;
                         candidate_pose.pose_rotation = candidate_pose.pose_rotation * yarp::math::axis2dcm(y_rotation_transform).submatrix(0, 2, 0, 2);
-                        candidate_pose.pose_translation = superq_center - (palm_width_y/4 + candidate_pose.pose_ax_size(2)) * gz/norm(gz) - palm_width_y/4 * gx/norm(gx);
+                        candidate_pose.pose_translation = superq_center + (palm_width_y/4 + candidate_pose.pose_ax_size(2)) * gz/norm(gz) - palm_width_y/4 * gx/norm(gx);
                     }
 
 
@@ -707,7 +769,7 @@ class GraspProcessorModule : public RFModule
                         candidate_pose.pose_vtk_actor->SetTotalLength(0.02, 0.02, 0.02);
 
                         stringstream ss;
-                        ss << fixed << setprecision(3) << candidate_pose.pose_cost_function(0);
+                        ss << fixed << setprecision(3) << candidate_pose.pose_cost_function(0) << "_" << fixed << setprecision(3) << candidate_pose.pose_cost_function(1);
                         candidate_pose.setvtkActorCaption(ss.str());
 
                         //  add actor to renderer
@@ -845,9 +907,34 @@ class GraspProcessorModule : public RFModule
         //  communication with actionRenderingEngine/cmd:io
 
         //  grasp(x y z gx gy gz theta) ("approach" (-0.05 0 +-0.05 0.0)) "left"/"right"
+        Bottle command, reply;
 
+        command.addString("grasp");
+        Bottle &ptr = command.addList();
+        ptr.addString("cartesian");
+        ptr.addDouble(pose(0));
+        ptr.addDouble(pose(1));
+        ptr.addDouble(pose(2));
 
+        Bottle &ptr1 = command.addList();
+        ptr1.addString("approach");
+        Bottle &ptr2 = ptr1.addList();
+        ptr2.addDouble(-0.05);
+        ptr2.addDouble(0.0);
+        if (grasping_hand == WhichHand::HAND_LEFT)
+        {
+            ptr2.addDouble(0.05);
+            command.addString("left");
+        }
+        else
+        {
+            ptr2.addDouble(-0.05);
+            command.addString("right");
+        }
+        ptr2.addDouble(0.0);
 
+        yInfo() << command.toString();
+        action_render_rpc.write(command, reply);
 
         return true;
     }
