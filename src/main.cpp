@@ -313,6 +313,11 @@ class GraspProcessorModule : public RFModule
                     return true;
                 }
             }
+            else
+            {
+                reply.addVocab(Vocab::encode("nack"));
+                return true;
+            }
             PointCloud<DataXYZRGBA> pc;
             yDebug() << "Requested object: " << obj;          
             if (requestRefreshPointCloud(pc, obj))
@@ -345,6 +350,11 @@ class GraspProcessorModule : public RFModule
                     reply.addVocab(Vocab::encode("nack"));
                     return true;
                 }
+            }
+            else
+            {
+                reply.addVocab(Vocab::encode("nack"));
+                return true;
             }
             PointCloud<DataXYZRGBA> pc;
             yDebug() << "Requested object: " << obj;
@@ -381,6 +391,11 @@ class GraspProcessorModule : public RFModule
                     reply.addVocab(Vocab::encode("nack"));
                     return true;
                 }
+            }
+            else
+            {
+                reply.addVocab(Vocab::encode("nack"));
+                return true;
             }
             string filename = command.get(1).toString();
             //  load point cloud from .off file, store it and refresh point cloud, request and refresh superquadric and compute poses
@@ -662,15 +677,15 @@ class GraspProcessorModule : public RFModule
         icart->setPosePriority("position");
         icart->setInTargetTol(0.001);
 
-        double min_torso_pitch, max_torso_pitch;
-        double min_torso_yaw, max_torso_yaw;
-        double min_torso_roll, max_torso_roll;
-        icart -> getLimits(0, &min_torso_pitch, &max_torso_pitch);
-        icart -> getLimits(1, &min_torso_roll, &max_torso_roll);
-        icart -> getLimits(2, &min_torso_yaw, &max_torso_yaw);
-        yInfo() << "Torso current pitch limits: min " << min_torso_pitch << " max " << max_torso_pitch;
-        yInfo() << "Torso current roll limits: min " << min_torso_roll << " max " << max_torso_roll;
-        yInfo() << "Torso current yaw limits: min " << min_torso_yaw << " max " << max_torso_yaw;
+//        double min_torso_pitch, max_torso_pitch;
+//        double min_torso_yaw, max_torso_yaw;
+//        double min_torso_roll, max_torso_roll;
+//        icart -> getLimits(0, &min_torso_pitch, &max_torso_pitch);
+//        icart -> getLimits(1, &min_torso_roll, &max_torso_roll);
+//        icart -> getLimits(2, &min_torso_yaw, &max_torso_yaw);
+//        yInfo() << "Torso current pitch limits: min " << min_torso_pitch << " max " << max_torso_pitch;
+//        yInfo() << "Torso current roll limits: min " << min_torso_roll << " max " << max_torso_roll;
+//        yInfo() << "Torso current yaw limits: min " << min_torso_yaw << " max " << max_torso_yaw;
 //        icart -> setLimits(0, min_torso_pitch, max_torso_pitch);
 //        icart -> setLimits(1, min_torso_roll, max_torso_roll);
 //        icart -> setLimits(2, min_torso_yaw, max_torso_yaw);
@@ -909,7 +924,7 @@ class GraspProcessorModule : public RFModule
     {
         //  communication with actionRenderingEngine/cmd:io
 
-        //  grasp(x y z gx gy gz theta) ("approach" (-0.05 0 +-0.05 0.0)) "left"/"right"
+        //  grasp("cartesian" x y z gx gy gz theta) ("approach" (-0.05 0 +-0.05 0.0)) "left"/"right"
         Bottle command, reply;
 
         command.addString("grasp");
@@ -918,6 +933,11 @@ class GraspProcessorModule : public RFModule
         ptr.addDouble(pose(0));
         ptr.addDouble(pose(1));
         ptr.addDouble(pose(2));
+        ptr.addDouble(pose(3));
+        ptr.addDouble(pose(4));
+        ptr.addDouble(pose(5));
+        ptr.addDouble(pose(6));
+
 
         Bottle &ptr1 = command.addList();
         ptr1.addString("approach");
@@ -944,7 +964,7 @@ class GraspProcessorModule : public RFModule
 
 
 public:
-    GraspProcessorModule(): closing(false), table_height_z(-0.1487), palm_width_y(0.08), grasp_width_x(0.1), grasping_hand(WhichHand::HAND_RIGHT)  {}
+    GraspProcessorModule(): closing(false), table_height_z(-0.15), palm_width_y(0.04), grasp_width_x(0.1), grasping_hand(WhichHand::HAND_RIGHT)  {}
 
 };
 
