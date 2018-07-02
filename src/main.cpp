@@ -147,8 +147,8 @@ class GraspProcessorModule : public RFModule
 
     //  filtering constants
     double table_height_z;
-    double palm_width_y;
-    double grasp_width_x;
+    double palm_width;
+    double grasp_diameter;
 
     bool configure(ResourceFinder &rf) override
     {
@@ -602,9 +602,9 @@ class GraspProcessorModule : public RFModule
          */
 
         bool ok1, ok2, ok3, ok4;
-        ok1 = candidate_pose.pose_transform(2, 3) - palm_width_y/2 > table_height_z;
-        ok2 = candidate_pose.pose_ax_size(0) * 2 < grasp_width_x;
-        ok3 = candidate_pose.pose_ax_size(1) * 2 > palm_width_y/2;
+        ok1 = candidate_pose.pose_transform(2, 3) - palm_width/2 > table_height_z;
+        ok2 = candidate_pose.pose_ax_size(0) * 2 < grasp_diameter;
+        ok3 = candidate_pose.pose_ax_size(1) * 2 > palm_width/2;
         ok4 = dot(candidate_pose.pose_transform.subcol(0, 1, 3), root_z_axis) <= 0.1;
 
         return (ok1 && ok2 && ok3 && ok4);
@@ -754,7 +754,7 @@ class GraspProcessorModule : public RFModule
                         y_rotation_transform(1) = 1.0;
                         y_rotation_transform(3) = angle;
                         candidate_pose.pose_rotation = candidate_pose.pose_rotation * yarp::math::axis2dcm(y_rotation_transform).submatrix(0, 2, 0, 2);
-                        candidate_pose.pose_translation = superq_center - (palm_width_y/4 + candidate_pose.pose_ax_size(2)) * gz/norm(gz) - palm_width_y/4 * gx/norm(gx);
+                        candidate_pose.pose_translation = superq_center - (palm_width/4 + candidate_pose.pose_ax_size(2)) * gz/norm(gz) - palm_width/4 * gx/norm(gx);
                     }
                     else
                     {
@@ -763,7 +763,7 @@ class GraspProcessorModule : public RFModule
                         y_rotation_transform(1) = 1.0;
                         y_rotation_transform(3) = angle;
                         candidate_pose.pose_rotation = candidate_pose.pose_rotation * yarp::math::axis2dcm(y_rotation_transform).submatrix(0, 2, 0, 2);
-                        candidate_pose.pose_translation = superq_center + (palm_width_y/4 + candidate_pose.pose_ax_size(2)) * gz/norm(gz) - palm_width_y/4 * gx/norm(gx);
+                        candidate_pose.pose_translation = superq_center + (palm_width/4 + candidate_pose.pose_ax_size(2)) * gz/norm(gz) - palm_width/4 * gx/norm(gx);
                     }
 
 
@@ -799,16 +799,6 @@ class GraspProcessorModule : public RFModule
                 }
             }
         }
-
-//        yInfo() << "Object orientation: " << superq_mat_orientation.toString();
-//        yInfo() << "Object center " << superq_center.toString();
-//        yInfo() << "Object size: x " << 2*superq_axes_size(0) << " y " << 2*superq_axes_size(1) << " z " << 2*superq_axes_size(2);
-
-//        yInfo() << "Feasible grasp candidates computed: " << pose_candidates.size();
-//        for (GraspPose o : pose_candidates)
-//        {
-//            yDebug() << o.pose_transform.toString();
-//        }
 
         //  restore previous context
         icart->restoreContext(context_backup);
@@ -964,7 +954,7 @@ class GraspProcessorModule : public RFModule
 
 
 public:
-    GraspProcessorModule(): closing(false), table_height_z(-0.15), palm_width_y(0.04), grasp_width_x(0.1), grasping_hand(WhichHand::HAND_RIGHT)  {}
+    GraspProcessorModule(): closing(false), table_height_z(-0.15), palm_width(0.04), grasp_diameter(0.1), grasping_hand(WhichHand::HAND_RIGHT)  {}
 
 };
 

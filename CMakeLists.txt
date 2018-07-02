@@ -3,7 +3,7 @@
 # Authors: Ugo Pattacini <fabrizio.bottarel@iit.it>
 
 cmake_minimum_required(VERSION 3.0.0)
-project(grasp-pose-gen)
+project(grasp-processor)
 
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_CXX_STANDARD 11)
@@ -45,3 +45,6 @@ endif()
 
 install(TARGETS ${PROJECT_NAME} DESTINATION bin)
 icubcontrib_add_uninstall_target()
+
+file(GLOB scripts ${CMAKE_SOURCE_DIR}/app/scripts/*.xml)
+yarp_install(FILES ${scripts} DESTINATION ${ICUBCONTRIB_APPLICATIONS_INSTALL_DIR})
