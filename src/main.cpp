@@ -126,7 +126,7 @@ class GraspProcessorModule : public RFModule
     WhichHand grasping_hand;
 
     //  client for cartesian interface
-    PolyDriver arm_client;
+    PolyDriver left_arm_client, right_arm_client;
     ICartesianControl *icart;
 
     //  visualization objects
@@ -157,22 +157,15 @@ class GraspProcessorModule : public RFModule
         hand = rf.check("hand", Value("right")).toString();
         robot = (rf.check("sim")? "icubSim" : "icub");
 
-        Property optionArm;
-        optionArm.put("device", "cartesiancontrollerclient");
+        Property optionLeftArm, optionRightArm;
 
-        //  parse for grasping hand
-        if (hand == "right")
-        {
-            grasping_hand = WhichHand::HAND_RIGHT;
-            optionArm.put("remote", "/" + robot + "/cartesianController/right_arm");
-            optionArm.put("local", "/" + moduleName + "/cartesianClient/right_arm");
-        }
-        else
-        {
-            grasping_hand = WhichHand::HAND_LEFT;
-            optionArm.put("remote", "/" + robot + "/cartesianController/left_arm");
-            optionArm.put("local", "/" + moduleName + "/cartesianClient/left_arm");
-        }
+        optionLeftArm.put("device", "cartesiancontrollerclient");
+        optionLeftArm.put("remote", "/" + robot + "/cartesianController/left_arm");
+        optionLeftArm.put("local", "/" + moduleName + "/cartesianClient/left_arm");
+
+        optionRightArm.put("device", "cartesiancontrollerclient");
+        optionRightArm.put("remote", "/" + robot + "/cartesianController/right_arm");
+        optionRightArm.put("local", "/" + moduleName + "/cartesianClient/right_arm");
 
         //  open the necessary ports
         superq_rpc.open("/" + moduleName + "/superquadricRetrieve:rpc");
@@ -182,9 +175,8 @@ class GraspProcessorModule : public RFModule
         module_rpc.open("/" + moduleName + "/cmd:rpc");
 
         //  open client and view
-        if(!arm_client.open(optionArm))
+        if(!(left_arm_client.open(optionLeftArm) && right_arm_client.open(optionRightArm)))
             return false;
-        arm_client.view(icart);
 
         //  attach callback
         attach(module_rpc);
@@ -283,7 +275,8 @@ class GraspProcessorModule : public RFModule
         action_render_rpc.close();
         reach_calib_rpc.close();
         module_rpc.close();
-        arm_client.close();
+        left_arm_client.close();
+        right_arm_client.close();
 
         return true;
 
@@ -296,11 +289,35 @@ class GraspProcessorModule : public RFModule
 
         bool cmd_success = false;
         Vector grasp_pose(7, 0.0);
+        string obj;
+        string hand;
 
-        if (command.check("grasp_pose"))
+        if (command.get(0).toString() == "grasp_pose")
         {
             //  normal operation
-            string obj = command.find("grasp_pose").asString();
+            if (command.size() == 3)
+            {
+                obj = command.get(1).toString();
+                hand = command.get(2).toString();
+                if (hand == "right")
+                {
+                    grasping_hand = WhichHand::HAND_RIGHT;
+                }
+                else if (hand == "left")
+                {
+                    grasping_hand = WhichHand::HAND_LEFT;
+                }
+                else
+                {
+                    reply.addVocab(Vocab::encode("nack"));
+                    return true;
+                }
+            }
+            else
+            {
+                reply.addVocab(Vocab::encode("nack"));
+                return true;
+            }
             PointCloud<DataXYZRGBA> pc;
             yDebug() << "Requested object: " << obj;          
             if (requestRefreshPointCloud(pc, obj))
@@ -313,10 +330,74 @@ class GraspProcessorModule : public RFModule
             }
         }
 
-        if (command.check("from_off_file"))
+        if (command.get(0).toString() == "grasp")
+        {
+            //  obtain grasp and render it
+            if (command.size() == 3)
+            {
+                obj = command.get(1).toString();
+                hand = command.get(2).toString();
+                if (hand == "right")
+                {
+                    grasping_hand = WhichHand::HAND_RIGHT;
+                }
+                else if (hand == "left")
+                {
+                    grasping_hand = WhichHand::HAND_LEFT;
+                }
+                else
+                {
+                    reply.addVocab(Vocab::encode("nack"));
+                    return true;
+                }
+            }
+            else
+            {
+                reply.addVocab(Vocab::encode("nack"));
+                return true;
+            }
+            PointCloud<DataXYZRGBA> pc;
+            yDebug() << "Requested object: " << obj;
+            if (requestRefreshPointCloud(pc, obj))
+            {
+                if (requestRefreshSuperquadric(pc))
+                {
+                    if (computeGraspPose(grasp_pose))
+                    {
+                        yInfo() << "Pose retrieved: " << grasp_pose.toString();
+                        cmd_success = executeGrasp(grasp_pose);
+                    }
+                }
+            }
+        }
+
+        if (command.get(0).toString() == "from_off_file")
         {
             //  process point cloud from file and perform candidate ranking
-            string filename = command.find("from_off_file").asString();
+            if (command.size() == 3)
+            {
+                obj = command.get(1).toString();
+                hand = command.get(2).toString();
+                if (hand == "right")
+                {
+                    grasping_hand = WhichHand::HAND_RIGHT;
+                }
+                else if (hand == "left")
+                {
+                    grasping_hand = WhichHand::HAND_LEFT;
+                }
+                else
+                {
+                    reply.addVocab(Vocab::encode("nack"));
+                    return true;
+                }
+            }
+            else
+            {
+                reply.addVocab(Vocab::encode("nack"));
+                return true;
+            }
+            string filename = command.get(1).toString();
             //  load point cloud from .off file, store it and refresh point cloud, request and refresh superquadric and compute poses
             PointCloud<DataXYZRGBA> pc;
 
@@ -330,7 +411,6 @@ class GraspProcessorModule : public RFModule
             }
 
             //  parse the OFF file line by line
-
             string line;
             getline(file, line);
             if (line != "COFF")
@@ -378,8 +458,6 @@ class GraspProcessorModule : public RFModule
         }
 
         reply.addVocab(Vocab::encode(cmd_success ? "ack":"nack"));
-
-
 
         return true;
 
@@ -556,8 +634,9 @@ class GraspProcessorModule : public RFModule
 
         candidate_pose.pose_cost_function(1) = norm(orientation_error_vector.subVector(0,2) * sin(orientation_error_vector(3))) / norm(orientation_error_vector.subVector(0,2));
 
-//        yDebug() << "Obtained pose: " << tmp.toString();
-//        yDebug() << "Obtained position: " << x_d_hat.toString();
+
+        candidate_pose.pose_cost_function(1) = 0.5*candidate_pose.pose_cost_function(1) + 0.5*(1-candidate_pose.pose_ax_size(1)/yarp::math::findMax(candidate_pose.pose_ax_size));
+
         yDebug() << "Cost function: " << candidate_pose.pose_cost_function.toString();
 
     }
@@ -567,6 +646,20 @@ class GraspProcessorModule : public RFModule
     {
         //  compute a series of viable grasp candidates according to superquadric parameters
         LockGuard lg(mutex);
+
+        if (grasping_hand == WhichHand::HAND_LEFT)
+        {
+            left_arm_client.view(icart);
+        }
+        else if (grasping_hand == WhichHand::HAND_RIGHT)
+        {
+            right_arm_client.view(icart);
+        }
+        else
+        {
+            yError() << "Invalid arm!";
+            return;
+        }
 
         //  store the context for the previous iKinCartesianController config
         int context_backup;
@@ -584,15 +677,15 @@ class GraspProcessorModule : public RFModule
         icart->setPosePriority("position");
         icart->setInTargetTol(0.001);
 
-        double min_torso_pitch, max_torso_pitch;
-        double min_torso_yaw, max_torso_yaw;
-        double min_torso_roll, max_torso_roll;
-        icart -> getLimits(0, &min_torso_pitch, &max_torso_pitch);
-        icart -> getLimits(1, &min_torso_roll, &max_torso_roll);
-        icart -> getLimits(2, &min_torso_yaw, &max_torso_yaw);
-        yInfo() << "Torso current pitch limits: min " << min_torso_pitch << " max " << max_torso_pitch;
-        yInfo() << "Torso current roll limits: min " << min_torso_roll << " max " << max_torso_roll;
-        yInfo() << "Torso current yaw limits: min " << min_torso_yaw << " max " << max_torso_yaw;
+//        double min_torso_pitch, max_torso_pitch;
+//        double min_torso_yaw, max_torso_yaw;
+//        double min_torso_roll, max_torso_roll;
+//        icart -> getLimits(0, &min_torso_pitch, &max_torso_pitch);
+//        icart -> getLimits(1, &min_torso_roll, &max_torso_roll);
+//        icart -> getLimits(2, &min_torso_yaw, &max_torso_yaw);
+//        yInfo() << "Torso current pitch limits: min " << min_torso_pitch << " max " << max_torso_pitch;
+//        yInfo() << "Torso current roll limits: min " << min_torso_roll << " max " << max_torso_roll;
+//        yInfo() << "Torso current yaw limits: min " << min_torso_yaw << " max " << max_torso_yaw;
 //        icart -> setLimits(0, min_torso_pitch, max_torso_pitch);
 //        icart -> setLimits(1, min_torso_roll, max_torso_roll);
 //        icart -> setLimits(2, min_torso_yaw, max_torso_yaw);
@@ -650,18 +743,9 @@ class GraspProcessorModule : public RFModule
                     candidate_pose.pose_ax_size(1) = superq_axes_size(jdx/2);
                     candidate_pose.pose_ax_size(2) = superq_axes_size(3 - idx/2 - jdx/2);
 
-                    //  translate along gz according to superquadric size
-                    //  minus sign, since we are using right hand
-                    //  left hand would have plus sign
-//                    if (grasping_hand == WhichHand::HAND_RIGHT)
-//                    {
-//                        candidate_pose.pose_translation = superq_center - (palm_width_y/3 + candidate_pose.pose_ax_size(2)) * gz/norm(gz) - palm_width_y/2 * gx/norm(gx);
-//                    }
-//                    else if (grasping_hand == WhichHand::HAND_LEFT)
-//                    {
-//                        candidate_pose.pose_translation = superq_center + (palm_width_y/3 + candidate_pose.pose_ax_size(2)) * gz/norm(gz) - palm_width_y/2 * gx/norm(gx);
-//                    }
-
+                    //  translate the pose along gz and gx according to the palm size
+                    //  rotate the pose around the hand y axis
+                    //  sign of operations depends upon the hand we are using
 
                     if (grasping_hand == WhichHand::HAND_RIGHT)
                     {
@@ -679,7 +763,7 @@ class GraspProcessorModule : public RFModule
                         y_rotation_transform(1) = 1.0;
                         y_rotation_transform(3) = angle;
                         candidate_pose.pose_rotation = candidate_pose.pose_rotation * yarp::math::axis2dcm(y_rotation_transform).submatrix(0, 2, 0, 2);
-                        candidate_pose.pose_translation = superq_center - (palm_width_y/4 + candidate_pose.pose_ax_size(2)) * gz/norm(gz) - palm_width_y/4 * gx/norm(gx);
+                        candidate_pose.pose_translation = superq_center + (palm_width_y/4 + candidate_pose.pose_ax_size(2)) * gz/norm(gz) - palm_width_y/4 * gx/norm(gx);
                     }
 
 
@@ -703,7 +787,7 @@ class GraspProcessorModule : public RFModule
                         candidate_pose.pose_vtk_actor->SetTotalLength(0.02, 0.02, 0.02);
 
                         stringstream ss;
-                        ss << fixed << setprecision(3) << candidate_pose.pose_cost_function(0);
+                        ss << fixed << setprecision(3) << candidate_pose.pose_cost_function(0) << "_" << fixed << setprecision(3) << candidate_pose.pose_cost_function(1);
                         candidate_pose.setvtkActorCaption(ss.str());
 
                         //  add actor to renderer
@@ -835,10 +919,52 @@ class GraspProcessorModule : public RFModule
         return success;
     }
 
+    /****************************************************************/
+    bool executeGrasp(Vector &pose)
+    {
+        //  communication with actionRenderingEngine/cmd:io
+
+        //  grasp("cartesian" x y z gx gy gz theta) ("approach" (-0.05 0 +-0.05 0.0)) "left"/"right"
+        Bottle command, reply;
+
+        command.addString("grasp");
+        Bottle &ptr = command.addList();
+        ptr.addString("cartesian");
+        ptr.addDouble(pose(0));
+        ptr.addDouble(pose(1));
+        ptr.addDouble(pose(2));
+        ptr.addDouble(pose(3));
+        ptr.addDouble(pose(4));
+        ptr.addDouble(pose(5));
+        ptr.addDouble(pose(6));
+
+
+        Bottle &ptr1 = command.addList();
+        ptr1.addString("approach");
+        Bottle &ptr2 = ptr1.addList();
+        ptr2.addDouble(-0.05);
+        ptr2.addDouble(0.0);
+        if (grasping_hand == WhichHand::HAND_LEFT)
+        {
+            ptr2.addDouble(0.05);
+            command.addString("left");
+        }
+        else
+        {
+            ptr2.addDouble(-0.05);
+            command.addString("right");
+        }
+        ptr2.addDouble(0.0);
+
+        yInfo() << command.toString();
+        action_render_rpc.write(command, reply);
+
+        return true;
+    }
 
 
 public:
-    GraspProcessorModule(): closing(false), table_height_z(-0.1487), palm_width_y(0.08), grasp_width_x(0.1), grasping_hand(WhichHand::HAND_RIGHT)  {}
+    GraspProcessorModule(): closing(false), table_height_z(-0.15), palm_width_y(0.04), grasp_width_x(0.1), grasping_hand(WhichHand::HAND_RIGHT)  {}
 
 };
 
