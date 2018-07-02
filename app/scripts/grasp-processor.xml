@@ -1,0 +1,44 @@
+<application>
+    <name>Grasp pose processor</name>
+
+    <dependencies>
+        <port>/pointCloudRead/rpc</port>
+        <port>/actionsRenderingEngine/cmd:io</port>
+        <port>/iolReachingCalibration/rpc</port>
+    </dependencies>
+
+    <module>
+        <name>grasp-processor</name>
+        <node>localhost</node>
+    </module>
+
+    <module>
+        <name>find-superquadric</name>
+        <node>localhost</node>
+    </module>
+
+    <connection>
+        <from>/graspProcessor/superquadricRetrieve:rpc</from>
+        <to>/find-superquadric/points:rpc</to>
+        <protocol>fast_tcp</protocol>
+    </connection>
+
+    <connection>
+        <from>/graspProcessor/pointCloud:rpc</from>
+        <to>/pointCloudRead/rpc</to>
+        <protocol>fast_tcp</protocol>
+    </connection>
+
+    <connection>
+        <from>/graspProcessor/actionRenderer:rpc</from>
+        <to>/actionsRenderingEngine/cmd:io</to>
+        <protocol>fast_tcp</protocol>
+    </connection>
+
+    <connection>
+        <from>/graspProcessor/reachingCalibration:rpc</from>
+        <to>/iolReachingCalibration/rpc</to>
+        <protocol>fast_tcp</protocol>
+    </connection>
+
+</application>
