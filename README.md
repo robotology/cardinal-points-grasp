@@ -45,9 +45,9 @@ All of these commands (at the moment) return an `ack` if the module reaches the 
 - `--sim`: if you need to use the module with the iCub-SIM.
 
 ### Example
-
 ```
 yarp rpc /graspProcessor/rpc
 >>grasp_pose Box right
-[ack]
+Response: [ack]
 ```
+![Example](./data/pics/box.png)
