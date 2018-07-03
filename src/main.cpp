@@ -155,7 +155,6 @@ class GraspProcessorModule : public RFModule
     {
 
         moduleName = rf.check("name", Value("graspProcessor")).toString();
-        hand = rf.check("hand", Value("right")).toString();
         robot = (rf.check("sim")? "icubSim" : "icub");
 
         Property optionLeftArm, optionRightArm;
@@ -535,6 +534,11 @@ class GraspProcessorModule : public RFModule
         cmd_request.addString("wait");
 
         action_render_rpc.write(cmd_request, cmd_reply);
+        if (cmd_reply.toString() != "ack")
+        {
+            yError() << "Didn't manage to look at the object";
+            return false;
+        }
 
         point_cloud.clear();
         cmd_request.clear();
