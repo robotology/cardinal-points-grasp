@@ -44,6 +44,10 @@ All of these commands (at the moment) return an `ack` if the module reaches the 
 - `--name moduleName`: start the module with the desired name (watch out for the port names!). 
 - `--sim`: if you need to use the module with the iCub-SIM.
 
+### Interaction diagram
+
+![Diagram](./data/misc/module_diagram.png)
+
 ### Example
 ```
 yarp rpc /graspProcessor/rpc
