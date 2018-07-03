@@ -149,6 +149,7 @@ class GraspProcessorModule : public RFModule
     double table_height_z;
     double palm_width;
     double grasp_diameter;
+    double finger_length;
 
     bool configure(ResourceFinder &rf) override
     {
@@ -527,11 +528,17 @@ class GraspProcessorModule : public RFModule
         //  put point cloud into container, return true if operation was ok
         //  or call refreshpointcloud
         Bottle cmd_request;
-        cmd_request.clear();
         Bottle cmd_reply;
-        cmd_reply.clear();
+
+        cmd_request.addString("look");
+        cmd_request.addString(object);
+        cmd_request.addString("wait");
+
+        action_render_rpc.write(cmd_request, cmd_reply);
 
         point_cloud.clear();
+        cmd_request.clear();
+        cmd_reply.clear();
 
         cmd_request.addString("get_point_cloud");
         cmd_request.addString(object);
@@ -602,10 +609,10 @@ class GraspProcessorModule : public RFModule
          */
 
         bool ok1, ok2, ok3, ok4;
-        ok1 = candidate_pose.pose_transform(2, 3) - palm_width/2 > table_height_z;
+        ok1 = candidate_pose.pose_translation(2) - palm_width/2 > table_height_z;
         ok2 = candidate_pose.pose_ax_size(0) * 2 < grasp_diameter;
         ok3 = candidate_pose.pose_ax_size(1) * 2 > palm_width/2;
-        ok4 = dot(candidate_pose.pose_transform.subcol(0, 1, 3), root_z_axis) <= 0.1;
+        ok4 = dot(candidate_pose.pose_rotation.getCol(1), root_z_axis) <= 0.1;
 
         return (ok1 && ok2 && ok3 && ok4);
     }
@@ -738,6 +745,12 @@ class GraspProcessorModule : public RFModule
                     candidate_pose.pose_rotation.setCol(1, gy);
                     candidate_pose.pose_rotation.setCol(2, gz);
 
+                    //  we can either have side or top grasps.
+                    //  it is helpful to have a variable to discriminate the grasp
+                    Vector z_root(3, 0.0);
+                    z_root(2) = 1.0;
+                    bool is_side_grasp = (dot(-1*z_root, gy) > 0.9);
+
                     //  set the superquadric size in the direction of each g_axis
                     candidate_pose.pose_ax_size(0) = superq_axes_size(idx/2);
                     candidate_pose.pose_ax_size(1) = superq_axes_size(jdx/2);
@@ -746,6 +759,7 @@ class GraspProcessorModule : public RFModule
                     //  translate the pose along gz and gx according to the palm size
                     //  rotate the pose around the hand y axis
                     //  sign of operations depends upon the hand we are using
+                    //  the placement of the hand wrt the superquadric center depends on the size along gx
 
                     if (grasping_hand == WhichHand::HAND_RIGHT)
                     {
@@ -754,7 +768,7 @@ class GraspProcessorModule : public RFModule
                         y_rotation_transform(1) = 1.0;
                         y_rotation_transform(3) = angle;
                         candidate_pose.pose_rotation = candidate_pose.pose_rotation * yarp::math::axis2dcm(y_rotation_transform).submatrix(0, 2, 0, 2);
-                        candidate_pose.pose_translation = superq_center - (palm_width/4 + candidate_pose.pose_ax_size(2)) * gz/norm(gz) - palm_width/4 * gx/norm(gx);
+                        candidate_pose.pose_translation = superq_center - ((candidate_pose.pose_ax_size(2) + 0.02) * gz/norm(gz)) - ((0*candidate_pose.pose_ax_size(0) + 0.02) * gx/norm(gx));
                     }
                     else
                     {
@@ -763,18 +777,32 @@ class GraspProcessorModule : public RFModule
                         y_rotation_transform(1) = 1.0;
                         y_rotation_transform(3) = angle;
                         candidate_pose.pose_rotation = candidate_pose.pose_rotation * yarp::math::axis2dcm(y_rotation_transform).submatrix(0, 2, 0, 2);
-                        candidate_pose.pose_translation = superq_center + (palm_width/4 + candidate_pose.pose_ax_size(2)) * gz/norm(gz) - palm_width/4 * gx/norm(gx);
-                    }
-
-
-                    if (!candidate_pose.setHomogeneousTransform(candidate_pose.pose_rotation, candidate_pose.pose_translation))
-                    {
-                        yError() << "Error setting homogeneous transform!";
-                        continue;
+                        candidate_pose.pose_translation = superq_center + ((candidate_pose.pose_ax_size(2) + 0.02) * gz/norm(gz)) - ((0*candidate_pose.pose_ax_size(0) + 0.02) * gx/norm(gx));
                     }
 
                     if (isCandidateGraspFeasible(candidate_pose))
                     {
+                        //  if the grasp is close to the table surface, we need to adjust the pose to avoid collision
+                        bool side_low = is_side_grasp && ((candidate_pose.pose_translation(2) - palm_width) < table_height_z);
+                        bool top_low = !is_side_grasp && ((candidate_pose.pose_translation(2) - finger_length) < table_height_z);
+
+                        if (side_low)
+                        {
+                            //  lift up the grasp closer to the upper end of the superquadric
+                            candidate_pose.pose_translation(2) = superq_center(2) + candidate_pose.pose_ax_size(1) - (palm_width * 2/3);
+                        }
+                        if (top_low)
+                        {
+                            //  grab the object with the grasp center on top of the superquadric center
+                            candidate_pose.pose_translation(2) = superq_center(2) - superq_axes_size(2) + finger_length;
+                        }
+
+                        if (!candidate_pose.setHomogeneousTransform(candidate_pose.pose_rotation, candidate_pose.pose_translation))
+                        {
+                            yError() << "Error setting homogeneous transform!";
+                            continue;
+                        }
+
                         //  if candidate is good, set vtk transform and actor
                         candidate_pose.setvtkTransform(candidate_pose.pose_transform);
                         candidate_pose.pose_vtk_actor->SetUserTransform(candidate_pose.pose_vtk_transform);
@@ -843,6 +871,7 @@ class GraspProcessorModule : public RFModule
             vtk_renderer->AddActor(best_candidate.pose_vtk_actor);
             yInfo() << "Best candidate: cartesian " << best_candidate.pose_translation.toString() << " pose " << yarp::math::dcm2axis(best_candidate.pose_rotation).toString();
             yInfo() << "Cost: " << best_candidate.pose_cost_function.toString();
+            yDebug()<< "candidate ax size: " << best_candidate.pose_ax_size.toString();
             return true;
         }
         else
@@ -954,7 +983,7 @@ class GraspProcessorModule : public RFModule
 
 
 public:
-    GraspProcessorModule(): closing(false), table_height_z(-0.15), palm_width(0.04), grasp_diameter(0.1), grasping_hand(WhichHand::HAND_RIGHT)  {}
+    GraspProcessorModule(): closing(false), table_height_z(-0.15), palm_width(0.08), finger_length(0.08), grasp_diameter(0.08), grasping_hand(WhichHand::HAND_RIGHT)  {}
 
 };
 
