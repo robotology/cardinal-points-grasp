@@ -19,6 +19,10 @@ cmake ../
 make install
 ```
 
+### Interaction diagram
+
+![Diagram](./data/misc/module_diagram.png)
+
 ### Usage
 This module is supposed to be used to generate and execute grasps on simple objects that lie on a surface (e.g. a table) in front of the robot. Given an object to grasp, the following actions get undertaken:
 1. `grasp-pose-gen` interfaces with [point-cloud-read](https://github.com/fbottarel/point-cloud-read) to retrieve a point cloud (if the object is present in the scene).
@@ -44,14 +48,10 @@ All of these commands (at the moment) return an `ack` if the module reaches the 
 - `--name moduleName`: start the module with the desired name (watch out for the port names!). 
 - `--sim`: if you need to use the module with the iCub-SIM.
 
-### Interaction diagram
-
-![Diagram](./data/misc/module_diagram.png)
-
 ### Example
 ```
 yarp rpc /graspProcessor/rpc
 >>grasp_pose Box right
 Response: [ack]
 ```
-![Example](./data/pics/box.png)
+<img src="./data/pics/box.png" alt="alt text" width="400">
