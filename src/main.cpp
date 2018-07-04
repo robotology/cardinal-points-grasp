@@ -534,7 +534,7 @@ class GraspProcessorModule : public RFModule
         cmd_request.addString("wait");
 
         action_render_rpc.write(cmd_request, cmd_reply);
-        if (cmd_reply.toString() != "ack")
+        if (cmd_reply.toString() != "[ack]")
         {
             yError() << "Didn't manage to look at the object";
             return false;
