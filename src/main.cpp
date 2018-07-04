@@ -129,6 +129,9 @@ class GraspProcessorModule : public RFModule
     PolyDriver left_arm_client, right_arm_client;
     ICartesianControl *icart;
 
+    //  backup context
+    int context_backup;
+
     //  visualization objects
     unique_ptr<Points> vtk_points;
     unique_ptr<Superquadric> vtk_superquadric;
@@ -464,6 +467,37 @@ class GraspProcessorModule : public RFModule
     }
 
     /****************************************************************/
+    void setGraspContext()
+    {
+        //  set up the context for the grasping planning and execution
+        //  enable all joints
+        Vector dof;
+        icart->getDOF(dof);
+        yDebug() << "Previous DOF config: [" << dof.toString() << "]";
+        Vector new_dof(10, 1);
+        new_dof(1) = 0.0;
+        icart->setDOF(new_dof, dof);
+        yDebug() << "New DOF config: [" << new_dof.toString() << "]";
+        icart->setPosePriority("position");
+        icart->setInTargetTol(0.001);
+
+        //  display and set motion limits
+//        double min_torso_pitch, max_torso_pitch;
+//        double min_torso_yaw, max_torso_yaw;
+//        double min_torso_roll, max_torso_roll;
+//        icart -> getLimits(0, &min_torso_pitch, &max_torso_pitch);
+//        icart -> getLimits(1, &min_torso_roll, &max_torso_roll);
+//        icart -> getLimits(2, &min_torso_yaw, &max_torso_yaw);
+//        yInfo() << "Torso current pitch limits: min " << min_torso_pitch << " max " << max_torso_pitch;
+//        yInfo() << "Torso current roll limits: min " << min_torso_roll << " max " << max_torso_roll;
+//        yInfo() << "Torso current yaw limits: min " << min_torso_yaw << " max " << max_torso_yaw;
+//        icart -> setLimits(0, min_torso_pitch, max_torso_pitch);
+//        icart -> setLimits(1, min_torso_roll, max_torso_roll);
+//        icart -> setLimits(2, min_torso_yaw, max_torso_yaw);
+
+    }
+
+    /****************************************************************/
     void refreshPointCloud(const PointCloud<DataXYZRGBA> &points)
     {
        if (points.size() > 0)
@@ -673,33 +707,10 @@ class GraspProcessorModule : public RFModule
         }
 
         //  store the context for the previous iKinCartesianController config
-        int context_backup;
         icart->storeContext(&context_backup);
 
         //  set up the context for the computation of the candidates
-        //  enable all joints
-        Vector dof;
-        icart->getDOF(dof);
-        yDebug() << "Previous DOF config: [" << dof.toString() << "]";
-        Vector new_dof(10, 1);
-        new_dof(1) = 0.0;
-        icart->setDOF(new_dof, dof);
-        yDebug() << "New DOF config: [" << new_dof.toString() << "]";
-        icart->setPosePriority("position");
-        icart->setInTargetTol(0.001);
-
-//        double min_torso_pitch, max_torso_pitch;
-//        double min_torso_yaw, max_torso_yaw;
-//        double min_torso_roll, max_torso_roll;
-//        icart -> getLimits(0, &min_torso_pitch, &max_torso_pitch);
-//        icart -> getLimits(1, &min_torso_roll, &max_torso_roll);
-//        icart -> getLimits(2, &min_torso_yaw, &max_torso_yaw);
-//        yInfo() << "Torso current pitch limits: min " << min_torso_pitch << " max " << max_torso_pitch;
-//        yInfo() << "Torso current roll limits: min " << min_torso_roll << " max " << max_torso_roll;
-//        yInfo() << "Torso current yaw limits: min " << min_torso_yaw << " max " << max_torso_yaw;
-//        icart -> setLimits(0, min_torso_pitch, max_torso_pitch);
-//        icart -> setLimits(1, min_torso_roll, max_torso_roll);
-//        icart -> setLimits(2, min_torso_yaw, max_torso_yaw);
+        setGraspContext();
 
         //  detach vtk actors corresponding to poses, if any are present
         for (GraspPose grasp_pose : pose_candidates)
@@ -914,7 +925,7 @@ class GraspProcessorModule : public RFModule
             poseFixed = poseToFix;
             poseFixed(0) = reply.get(1).asDouble();
             poseFixed(1) = reply.get(2).asDouble();
-            poseFixed(3) = reply.get(3).asDouble();
+            poseFixed(2) = reply.get(3).asDouble();
             return true;
         }
         else
@@ -945,44 +956,65 @@ class GraspProcessorModule : public RFModule
     /****************************************************************/
     bool executeGrasp(Vector &pose)
     {
-        //  communication with actionRenderingEngine/cmd:io
-
-        //  grasp("cartesian" x y z gx gy gz theta) ("approach" (-0.05 0 +-0.05 0.0)) "left"/"right"
-        Bottle command, reply;
-
-        command.addString("grasp");
-        Bottle &ptr = command.addList();
-        ptr.addString("cartesian");
-        ptr.addDouble(pose(0));
-        ptr.addDouble(pose(1));
-        ptr.addDouble(pose(2));
-        ptr.addDouble(pose(3));
-        ptr.addDouble(pose(4));
-        ptr.addDouble(pose(5));
-        ptr.addDouble(pose(6));
-
-
-        Bottle &ptr1 = command.addList();
-        ptr1.addString("approach");
-        Bottle &ptr2 = ptr1.addList();
-        ptr2.addDouble(-0.05);
-        ptr2.addDouble(0.0);
-        if (grasping_hand == WhichHand::HAND_LEFT)
+        if (robot == "icub")
         {
-            ptr2.addDouble(0.05);
-            command.addString("left");
+            //  communication with actionRenderingEngine/cmd:io
+            //  grasp("cartesian" x y z gx gy gz theta) ("approach" (-0.05 0 +-0.05 0.0)) "left"/"right"
+            Bottle command, reply;
+
+            command.addString("grasp");
+            Bottle &ptr = command.addList();
+            ptr.addString("cartesian");
+            ptr.addDouble(pose(0));
+            ptr.addDouble(pose(1));
+            ptr.addDouble(pose(2));
+            ptr.addDouble(pose(3));
+            ptr.addDouble(pose(4));
+            ptr.addDouble(pose(5));
+            ptr.addDouble(pose(6));
+
+
+            Bottle &ptr1 = command.addList();
+            ptr1.addString("approach");
+            Bottle &ptr2 = ptr1.addList();
+            ptr2.addDouble(-0.05);
+            ptr2.addDouble(0.0);
+            if (grasping_hand == WhichHand::HAND_LEFT)
+            {
+                ptr2.addDouble(0.05);
+                command.addString("left");
+            }
+            else
+            {
+                ptr2.addDouble(-0.05);
+                command.addString("right");
+            }
+            ptr2.addDouble(0.0);
+
+            yInfo() << command.toString();
+            action_render_rpc.write(command, reply);
+            if (reply.toString() == "[ack]")
+            {
+                return true;
+            }
+            else
+            {
+                return false;
+            }
         }
         else
         {
-            ptr2.addDouble(-0.05);
-            command.addString("right");
+            //  simulation context, suppose there is no actionsRenderingEngine running
+            setGraspContext();
+            Vector previous_x(3), previous_o(4);
+            icart->getPose(previous_x, previous_o);
+            icart->goToPoseSync(pose.subVector(0, 2), pose.subVector(3,6));
+            icart->waitMotionDone();
+            icart->goToPoseSync(previous_x, previous_o);
+            icart->waitMotionDone();
+            icart->restoreContext(context_backup);
+            return true;
         }
-        ptr2.addDouble(0.0);
-
-        yInfo() << command.toString();
-        action_render_rpc.write(command, reply);
-
-        return true;
     }
 
 
