@@ -410,6 +410,7 @@ class GraspProcessorModule : public RFModule
             if (!file.is_open())
             {
                 yError() << "Unable to open file";
+                reply.addVocab(Vocab::encode("nack"));
                 return false;
             }
 
@@ -419,6 +420,7 @@ class GraspProcessorModule : public RFModule
             if (line != "COFF")
             {
                 yError() << "File parsing failed";
+                reply.addVocab(Vocab::encode("nack"));
                 return false;
             }
             line.clear();
@@ -473,11 +475,11 @@ class GraspProcessorModule : public RFModule
         //  enable all joints
         Vector dof;
         icart->getDOF(dof);
-        yDebug() << "Previous DOF config: [" << dof.toString() << "]";
+        //yDebug() << "Previous DOF config: [" << dof.toString() << "]";
         Vector new_dof(10, 1);
         new_dof(1) = 0.0;
         icart->setDOF(new_dof, dof);
-        yDebug() << "New DOF config: [" << new_dof.toString() << "]";
+        //yDebug() << "New DOF config: [" << new_dof.toString() << "]";
         icart->setPosePriority("position");
         icart->setInTargetTol(0.001);
 
