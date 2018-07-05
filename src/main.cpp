@@ -947,7 +947,16 @@ class GraspProcessorModule : public RFModule
         GraspPose best_pose;
         if(getBestCandidatePose(best_pose))
         {
-            success = fixReachingOffset(best_pose.getPose(), pose);
+            if (robot == "icub")
+            {
+                success = fixReachingOffset(best_pose.getPose(), pose);
+            }
+            else
+            {
+                //  no need to fix the offset in simulation
+                pose = best_pose.getPose();
+                success = true;
+            }
         }
 
         return success;
