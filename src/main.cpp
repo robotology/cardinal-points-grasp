@@ -888,9 +888,7 @@ class GraspProcessorModule : public RFModule
 
             //  display the best candidate
             LockGuard lg(mutex);
-            vtk_renderer->RemoveActor(best_candidate.pose_vtk_actor);
             best_candidate.pose_vtk_actor->SetTotalLength(0.06, 0.06, 0.06);
-            vtk_renderer->AddActor(best_candidate.pose_vtk_actor);
             yInfo() << "Best candidate: cartesian " << best_candidate.pose_translation.toString() << " pose " << yarp::math::dcm2axis(best_candidate.pose_rotation).toString();
             yInfo() << "Cost: " << best_candidate.pose_cost_function.toString();
             yDebug()<< "candidate ax size: " << best_candidate.pose_ax_size.toString();
