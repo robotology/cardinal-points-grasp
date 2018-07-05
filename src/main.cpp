@@ -154,11 +154,18 @@ class GraspProcessorModule : public RFModule
     double grasp_diameter;
     double finger_length;
 
+    //  visualization parameters
+    int x, y, h, w;
+
     bool configure(ResourceFinder &rf) override
     {
 
         moduleName = rf.check("name", Value("graspProcessor")).toString();
         robot = (rf.check("sim")? "icubSim" : "icub");
+        x = rf.check("x", Value(0)).asInt();
+        y = rf.check("y", Value(0)).asInt();
+        w = rf.check("width", Value(600)).asInt();
+        h = rf.check("height", Value(600)).asInt();
 
         Property optionLeftArm, optionRightArm;
 
@@ -196,7 +203,8 @@ class GraspProcessorModule : public RFModule
         //  set up rendering window and interactor
         vtk_renderer = vtkSmartPointer<vtkRenderer>::New();
         vtk_renderWindow = vtkSmartPointer<vtkRenderWindow>::New();
-        vtk_renderWindow->SetSize(600,600);
+        vtk_renderWindow->SetSize(w, h);
+        vtk_renderWindow->SetPosition(x, y);
         vtk_renderWindow->AddRenderer(vtk_renderer);
         vtk_renderWindowInteractor=vtkSmartPointer<vtkRenderWindowInteractor>::New();
         vtk_renderWindowInteractor->SetRenderWindow(vtk_renderWindow);
