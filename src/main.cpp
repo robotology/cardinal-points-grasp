@@ -519,13 +519,11 @@ class GraspProcessorModule : public RFModule
 
            vtk_camera->SetPosition(centroid[0]+1.0, centroid[1], centroid[2]+2.0);
            vtk_camera->SetViewUp(0, 0, 1);
-           vtk_renderWindowInteractor->Render();
-
        }
     }
 
     /****************************************************************/
-    void refreshSuperquadric(const Vector superq_params)
+    void refreshSuperquadric(const Vector &superq_params)
     {
         //  the incoming message has the following syntax
         //  (center-x center-y center-z angle size-x size-y size-z epsilon-1 epsilon-2)
@@ -713,7 +711,7 @@ class GraspProcessorModule : public RFModule
         setGraspContext();
 
         //  detach vtk actors corresponding to poses, if any are present
-        for (GraspPose grasp_pose : pose_candidates)
+        for (auto &grasp_pose : pose_candidates)
         {
             vtk_renderer->RemoveActor(grasp_pose.pose_vtk_actor);
             vtk_renderer->RemoveActor(grasp_pose.pose_vtk_caption_actor);
@@ -837,7 +835,6 @@ class GraspProcessorModule : public RFModule
                         vtk_renderer->AddActor(candidate_pose.pose_vtk_actor);
                         vtk_renderer->AddActor(candidate_pose.pose_vtk_caption_actor);
                         pose_candidates.push_back(candidate_pose);
-
                     }
                 }
             }
