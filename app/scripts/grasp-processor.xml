@@ -5,6 +5,10 @@
         <port>/pointCloudRead/rpc</port>
         <port>/actionsRenderingEngine/cmd:io</port>
         <port>/iolReachingCalibration/rpc</port>
+        <port>/SFM/rpc</port>
+        <port>/memory/rpc</port>
+        <port>/icub/camcalib/left/out</port>
+        <port>/lbpExtract/rpc:i</port>
     </dependencies>
 
     <module>
@@ -14,6 +18,12 @@
 
     <module>
         <name>find-superquadric</name>
+	    <parameters>--random-sample 0.2 --remove-outliers "(0.01 10)"</parameters>
+        <node>localhost</node>
+    </module>
+
+    <module>
+        <name>point-cloud-read</name>
         <node>localhost</node>
     </module>
 
@@ -40,5 +50,29 @@
         <to>/iolReachingCalibration/rpc</to>
         <protocol>fast_tcp</protocol>
     </connection>
+
+    <connection>
+      <from>/icub/camcalib/left/out</from>
+      <to>/pointCloudRead/imgL:i</to>
+      <protocol>udp</protocol>
+  </connection>
+
+  <connection>
+      <from>/pointCloudRead/OPCrpc</from>
+      <to>/memory/rpc</to>
+      <protocol>fast_tcp</protocol>
+  </connection>
+
+  <connection>
+      <from>/pointCloudRead/SFMrpc</from>
+      <to>/SFM/rpc</to>
+      <protocol>fast_tcp</protocol>
+  </connection>
+
+  <connection>
+      <from>/pointCloudRead/segmrpc</from>
+      <to>/lbpExtract/rpc:i</to>
+      <protocol>fast_tcp</protocol>
+  </connection>
 
 </application>

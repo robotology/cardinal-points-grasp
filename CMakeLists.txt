@@ -19,7 +19,6 @@ endif()
 find_package(YARP REQUIRED)
 find_package(ICUB REQUIRED)
 find_package(ICUBcontrib REQUIRED)
-list(APPEND CMAKE_MODULE_PATH ${YARP_MODULE_PATH})
 list(APPEND CMAKE_MODULE_PATH ${ICUB_MODULE_PATH})
 list(APPEND CMAKE_MODULE_PATH ${ICUBCONTRIB_MODULE_PATH})
 
@@ -33,7 +32,8 @@ icubcontrib_set_default_prefix()
 set(headers include/objectsLib.h)
 set(sources src/main.cpp src/objectsLib.cpp)
 
-include_directories(${PROJECT_SOURCE_DIR}/src ${PROJECT_SOURCE_DIR}/include ${YARP_INCLUDE_DIRS})
+add_definitions(-D_USE_MATH_DEFINES)
+include_directories(${PROJECT_SOURCE_DIR}/src ${PROJECT_SOURCE_DIR}/include)
 add_executable(${PROJECT_NAME} ${sources} ${headers})
 
 target_link_libraries(${PROJECT_NAME} ${YARP_LIBRARIES})
