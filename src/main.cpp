@@ -547,8 +547,9 @@ class GraspProcessorModule : public RFModule
                centroid[i] = 0.5 * (bounds[i<<1] + bounds[(i<<1)+1]);
            }
 
-           vtk_camera->SetPosition(centroid[0]+1.0, centroid[1], centroid[2]+2.0);
+           vtk_camera->SetPosition(centroid[0]+0.5, centroid[1], centroid[2]+1.0);
            vtk_camera->SetViewUp(0, 0, 1);
+           vtk_camera->SetFocalPoint(centroid.data());
        }
     }
 
@@ -895,7 +896,6 @@ class GraspProcessorModule : public RFModule
                         pose_actors[idx*search_space_gy.size() + jdx]->SetTotalLength(0.02, 0.02, 0.02);
                         pose_actors[idx*search_space_gy.size() + jdx]->VisibilityOn();
 
-                        //candidate_pose->pose_vtk_caption_actor->ShallowCopy(pose_captions[idx*search_space_gy.size() + jdx]);
                         pose_captions[idx*search_space_gy.size() + jdx]->VisibilityOn();
                         pose_captions[idx*search_space_gy.size() + jdx]->GetTextActor()->SetTextScaleModeToNone();
                         pose_captions[idx*search_space_gy.size() + jdx]->SetCaption(candidate_pose->pose_vtk_caption_actor->GetCaption());
@@ -906,10 +906,8 @@ class GraspProcessorModule : public RFModule
                         pose_captions[idx*search_space_gy.size() + jdx]->GetCaptionTextProperty()->ShadowOff();
                         pose_captions[idx*search_space_gy.size() + jdx]->GetCaptionTextProperty()->BoldOff();
                         pose_captions[idx*search_space_gy.size() + jdx]->GetCaptionTextProperty()->ItalicOff();
+                        pose_captions[idx*search_space_gy.size() + jdx]->GetCaptionTextProperty()->SetColor(1.0, 1.0, 1.0);
                         pose_captions[idx*search_space_gy.size() + jdx]->SetAttachmentPoint(candidate_pose->pose_vtk_caption_actor->GetAttachmentPoint());
-
-
-
 
                         //  add actor to renderer
                         //vtk_renderer->AddActor(candidate_pose->pose_vtk_actor);
