@@ -149,6 +149,10 @@ class GraspProcessorModule : public RFModule
     //  grasping pose candidates
     vector<shared_ptr<GraspPose>> pose_candidates;
 
+    //  grasp pose actors (temporary fix)
+    vector<vtkSmartPointer<vtkAxesActor>> pose_actors;
+    vector<vtkSmartPointer<vtkCaptionActor2D>> pose_captions;
+
     //  filtering constants
     double table_height_z;
     double palm_width;
@@ -231,6 +235,19 @@ class GraspProcessorModule : public RFModule
         vtk_camera->SetPosition(0.1, 0.0, 0.5);
         vtk_camera->SetViewUp(0.0, 0.0, 1.0);
         vtk_renderer->SetActiveCamera(vtk_camera);
+
+        //  prepare the pose actors vector
+        for (size_t idx = 0; idx < 25; idx++)
+        {
+            vtkSmartPointer<vtkAxesActor> ax_actor = vtkSmartPointer<vtkAxesActor>::New();
+            vtkSmartPointer<vtkCaptionActor2D> cap_actor = vtkSmartPointer<vtkCaptionActor2D>::New();
+            ax_actor->VisibilityOff();
+            cap_actor->VisibilityOff();
+            pose_actors.push_back(ax_actor);
+            pose_captions.push_back(cap_actor);
+            vtk_renderer->AddActor(pose_actors[idx]);
+            vtk_renderer->AddActor(pose_captions[idx]);
+        }
 
         //  activate interactor
         vtk_style=vtkSmartPointer<vtkInteractorStyleSwitch>::New();
@@ -722,11 +739,23 @@ class GraspProcessorModule : public RFModule
         setGraspContext();
 
         //  detach vtk actors corresponding to poses, if any are present
-        for (auto &grasp_pose : pose_candidates)
+//        for (auto &grasp_pose : pose_candidates)
+//        {
+//            vtk_renderer->RemoveActor(grasp_pose->pose_vtk_actor);
+//            vtk_renderer->RemoveActor(grasp_pose->pose_vtk_caption_actor);
+//        }
+
+        //  set pose actors to be invisible
+        for (auto &pose_actor : pose_actors)
         {
-            vtk_renderer->RemoveActor(grasp_pose->pose_vtk_actor);
-            vtk_renderer->RemoveActor(grasp_pose->pose_vtk_caption_actor);
+            pose_actor->VisibilityOff();
         }
+
+        for (auto &cap_actor : pose_captions)
+        {
+            cap_actor->VisibilityOff();
+        }
+
 
         //  get superquadric parameters
         pose_candidates.clear();
@@ -830,21 +859,43 @@ class GraspProcessorModule : public RFModule
                         //  if candidate is good, set vtk transform and actor
                         candidate_pose->setvtkTransform(candidate_pose->pose_transform);
                         candidate_pose->pose_vtk_actor->SetUserTransform(candidate_pose->pose_vtk_transform);
+                        pose_actors[idx*search_space_gy.size() + jdx]->SetUserTransform(candidate_pose->pose_vtk_transform);
 
                         //  calculate the cost function for the pose
                         getPoseCostFunction(candidate_pose);
 
                         //  fix graphical properties
-                        candidate_pose->pose_vtk_actor->AxisLabelsOff();
-                        candidate_pose->pose_vtk_actor->SetTotalLength(0.02, 0.02, 0.02);
+//                        candidate_pose->pose_vtk_actor->AxisLabelsOff();
+//                        candidate_pose->pose_vtk_actor->SetTotalLength(0.02, 0.02, 0.02);
 
                         stringstream ss;
                         ss << fixed << setprecision(3) << candidate_pose->pose_cost_function(0) << "_" << fixed << setprecision(3) << candidate_pose->pose_cost_function(1);
                         candidate_pose->setvtkActorCaption(ss.str());
 
+                        candidate_pose->pose_vtk_actor->ShallowCopy(pose_actors[idx*search_space_gy.size() + jdx]);
+                        pose_actors[idx*search_space_gy.size() + jdx]->AxisLabelsOff();
+                        pose_actors[idx*search_space_gy.size() + jdx]->SetTotalLength(0.02, 0.02, 0.02);
+                        pose_actors[idx*search_space_gy.size() + jdx]->VisibilityOn();
+
+                        //candidate_pose->pose_vtk_caption_actor->ShallowCopy(pose_captions[idx*search_space_gy.size() + jdx]);
+                        pose_captions[idx*search_space_gy.size() + jdx]->VisibilityOn();
+                        pose_captions[idx*search_space_gy.size() + jdx]->GetTextActor()->SetTextScaleModeToNone();
+                        pose_captions[idx*search_space_gy.size() + jdx]->SetCaption(candidate_pose->pose_vtk_caption_actor->GetCaption());
+                        pose_captions[idx*search_space_gy.size() + jdx]->BorderOff();
+                        pose_captions[idx*search_space_gy.size() + jdx]->LeaderOn();
+                        pose_captions[idx*search_space_gy.size() + jdx]->GetCaptionTextProperty()->SetFontSize(20);
+                        pose_captions[idx*search_space_gy.size() + jdx]->GetCaptionTextProperty()->FrameOff();
+                        pose_captions[idx*search_space_gy.size() + jdx]->GetCaptionTextProperty()->ShadowOff();
+                        pose_captions[idx*search_space_gy.size() + jdx]->GetCaptionTextProperty()->BoldOff();
+                        pose_captions[idx*search_space_gy.size() + jdx]->GetCaptionTextProperty()->ItalicOff();
+                        pose_captions[idx*search_space_gy.size() + jdx]->SetAttachmentPoint(candidate_pose->pose_vtk_caption_actor->GetAttachmentPoint());
+
+
+
+
                         //  add actor to renderer
-                        vtk_renderer->AddActor(candidate_pose->pose_vtk_actor);
-                        vtk_renderer->AddActor(candidate_pose->pose_vtk_caption_actor);
+                        //vtk_renderer->AddActor(candidate_pose->pose_vtk_actor);
+                        //vtk_renderer->AddActor(candidate_pose->pose_vtk_caption_actor);
                         pose_candidates.push_back(candidate_pose);
                     }
                 }
@@ -889,7 +940,23 @@ class GraspProcessorModule : public RFModule
 
             //  display the best candidate
             LockGuard lg(mutex);
-            best_candidate->pose_vtk_actor->SetTotalLength(0.06, 0.06, 0.06);
+            //best_candidate->pose_vtk_actor->SetTotalLength(0.06, 0.06, 0.06);
+            for (auto &caption : pose_captions)
+            {
+
+                if (caption->GetCaption() == NULL)
+                    continue;
+
+                string string2(best_candidate->pose_vtk_caption_actor->GetCaption());
+                string string1(caption->GetCaption());
+
+                if (string1 == string2)
+                {
+                    caption->GetCaptionTextProperty()->SetColor(0.0, 1.0, 0.0);
+                    caption->GetCaptionTextProperty()->BoldOn();
+                    break;
+                }
+            }
             yInfo() << "Best candidate: cartesian " << best_candidate->pose_translation.toString()
                     << " pose " << yarp::math::dcm2axis(best_candidate->pose_rotation).toString();
             yInfo() << "Cost: " << best_candidate->pose_cost_function.toString();
