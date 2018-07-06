@@ -36,6 +36,9 @@ add_definitions(-D_USE_MATH_DEFINES)
 include_directories(${PROJECT_SOURCE_DIR}/src ${PROJECT_SOURCE_DIR}/include)
 add_executable(${PROJECT_NAME} ${sources} ${headers})
 
+add_executable(test-grasp-processor src/test_client.cpp)
+target_link_libraries(test-grasp-processor ${YARP_LIBRARIES})
+
 target_link_libraries(${PROJECT_NAME} ${YARP_LIBRARIES})
 if(VTK_LIBRARIES)
   target_link_libraries(${PROJECT_NAME} ${VTK_LIBRARIES})
