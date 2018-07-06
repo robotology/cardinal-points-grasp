@@ -737,6 +737,7 @@ class GraspProcessorModule : public RFModule
 
         //  retrieve table height
         //  otherwise, leave default value
+        bool table_ok = false;
         if (robot != "icubSim" && table_calib_rpc.getOutputCount() > 0)
         {
             Bottle table_cmd, table_rply;
@@ -744,9 +745,16 @@ class GraspProcessorModule : public RFModule
             table_cmd.addString("table");
 
             table_calib_rpc.write(table_cmd, table_rply);
-            table_height_z = table_rply.get(0).asDouble();
+            if (Bottle *payload = table_rply.get(0).asList())
+            {
+                if (payload->size() >= 2)
+                {
+                    table_height_z = payload->get(1).asDouble();
+                    table_ok = true;
+                }
+            }
         }
-        else
+        if (!table_ok)
         {
             yInfo() << "Unable to retrieve table height, using default.";
         }
