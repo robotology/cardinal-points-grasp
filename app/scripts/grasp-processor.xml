@@ -76,9 +76,9 @@
   </connection>
 
   <connection>
-    <from>/iolStateMachineHandler/motor_grasp:rpc</from>
-    <to>/graspProcessor/cmd:rpc</to>
-    <protocol>fast_tcp</protocol>
+      <from>/iolStateMachineHandler/motor_grasp:rpc</from>
+      <to>/graspProcessor/cmd:rpc</to>
+      <protocol>fast_tcp</protocol>
   </connection>
 
 </application>
