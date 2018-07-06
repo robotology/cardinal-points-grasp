@@ -118,6 +118,7 @@ class GraspProcessorModule : public RFModule
     RpcClient point_cloud_rpc;
     RpcClient action_render_rpc;    //not used atm
     RpcClient reach_calib_rpc;
+    RpcClient table_calib_rpc;
     RpcServer module_rpc;   //will be replaced by idl services
 
     bool closing;
@@ -187,6 +188,7 @@ class GraspProcessorModule : public RFModule
         point_cloud_rpc.open("/" + moduleName + "/pointCloud:rpc");
         action_render_rpc.open("/" + moduleName + "/actionRenderer:rpc");
         reach_calib_rpc.open("/" + moduleName + "/reachingCalibration:rpc");
+        table_calib_rpc.open("/" + moduleName + "/tableCalib:rpc");
         module_rpc.open("/" + moduleName + "/cmd:rpc");
 
         //  open client and view
@@ -290,10 +292,10 @@ class GraspProcessorModule : public RFModule
         action_render_rpc.interrupt();
         reach_calib_rpc.interrupt();
         module_rpc.interrupt();
+        table_calib_rpc.interrupt();
         closing = true;
 
         return true;
-
     }
 
     /****************************************************************/
@@ -306,9 +308,9 @@ class GraspProcessorModule : public RFModule
         module_rpc.close();
         left_arm_client.close();
         right_arm_client.close();
+        table_calib_rpc.close();
 
         return true;
-
     }
 
     /****************************************************************/
@@ -730,6 +732,22 @@ class GraspProcessorModule : public RFModule
         {
             yError() << "Invalid arm!";
             return;
+        }
+
+        //  retrieve table height
+        //  otherwise, leave default value
+        if (robot != "icubSim" && table_calib_rpc.getOutputCount() > 0)
+        {
+            Bottle table_cmd, table_rply;
+            table_cmd.addString("get");
+            table_cmd.addString("table");
+
+            table_calib_rpc.write(table_cmd, table_rply);
+            table_height_z = table_rply.get(0).asDouble();
+        }
+        else
+        {
+            yInfo() << "Unable to retrieve table height, using default.";
         }
 
         //  store the context for the previous iKinCartesianController config

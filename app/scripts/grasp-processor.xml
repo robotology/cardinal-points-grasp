@@ -4,6 +4,7 @@
     <dependencies>
         <port>/pointCloudRead/rpc</port>
         <port>/actionsRenderingEngine/cmd:io</port>
+        <port>/actionsRenderingEngine/get:io</port>
         <port>/iolReachingCalibration/rpc</port>
         <port>/SFM/rpc</port>
         <port>/memory/rpc</port>
@@ -42,6 +43,12 @@
     <connection>
         <from>/graspProcessor/actionRenderer:rpc</from>
         <to>/actionsRenderingEngine/cmd:io</to>
+        <protocol>fast_tcp</protocol>
+    </connection>
+
+    <connection>
+        <from>/graspProcessor/tableCalib:rpc</from>
+        <to>/actionsRenderingEngine/get:io</to>
         <protocol>fast_tcp</protocol>
     </connection>
 
