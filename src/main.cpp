@@ -928,6 +928,7 @@ class GraspProcessorModule : public RFModule
 
         //  restore previous context
         icart->restoreContext(context_backup);
+        icart->deleteContext(context_backup);
 
         return;
 
@@ -1112,6 +1113,7 @@ class GraspProcessorModule : public RFModule
         else
         {
             //  simulation context, suppose there is no actionsRenderingEngine running
+            icart->storeContext(&context_backup);
             setGraspContext();
             Vector previous_x(3), previous_o(4);
             icart->getPose(previous_x, previous_o);
@@ -1120,6 +1122,7 @@ class GraspProcessorModule : public RFModule
             icart->goToPoseSync(previous_x, previous_o);
             icart->waitMotionDone();
             icart->restoreContext(context_backup);
+            icart->deleteContext(context_backup);
             return true;
         }
     }
