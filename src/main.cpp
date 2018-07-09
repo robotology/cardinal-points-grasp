@@ -542,13 +542,15 @@ class GraspProcessorModule : public RFModule
            vector<double> bounds(6), centroid(3);
            vtk_points->get_polydata()->GetBounds(bounds.data());
 
+           double bb = 0.0;
            for (size_t i=0; i<centroid.size(); i++)
            {
                centroid[i] = 0.5 * (bounds[i<<1] + bounds[(i<<1)+1]);
+               bb = std::max(bb, bounds[(i<<1)+1] - bounds[i<<1]);
            }
 
-           vtk_camera->SetPosition(centroid[0]+0.5, centroid[1], centroid[2]+1.0);
-           vtk_camera->SetViewUp(0, 0, 1);
+           vtk_camera->SetPosition(centroid[0] + 3.0 * bb, centroid[1], centroid[2]);
+           vtk_camera->SetViewUp(0.0, 0.0, 1.0);
            vtk_camera->SetFocalPoint(centroid.data());
        }
     }
@@ -841,24 +843,13 @@ class GraspProcessorModule : public RFModule
                     //  sign of operations depends upon the hand we are using
                     //  the placement of the hand wrt the superquadric center depends on the size along gx
 
-                    if (grasping_hand == WhichHand::HAND_RIGHT)
-                    {
-                        double angle = -M_PI/4;
-                        Vector y_rotation_transform(4, 0.0);
-                        y_rotation_transform(1) = 1.0;
-                        y_rotation_transform(3) = angle;
-                        candidate_pose->pose_rotation = candidate_pose->pose_rotation * yarp::math::axis2dcm(y_rotation_transform).submatrix(0, 2, 0, 2);
-                        candidate_pose->pose_translation = superq_center - (candidate_pose->pose_ax_size(2) * gz/norm(gz)) - 0.02 * gx/norm(gx);
-                    }
-                    else
-                    {
-                        double angle = M_PI/4;
-                        Vector y_rotation_transform(4, 0.0);
-                        y_rotation_transform(1) = 1.0;
-                        y_rotation_transform(3) = angle;
-                        candidate_pose->pose_rotation = candidate_pose->pose_rotation * yarp::math::axis2dcm(y_rotation_transform).submatrix(0, 2, 0, 2);
-                        candidate_pose->pose_translation = superq_center + (candidate_pose->pose_ax_size(2) * gz/norm(gz)) - 0.02 * gx/norm(gx);
-                    }
+                    double s = (grasping_hand == WhichHand::HAND_RIGHT ? -1.0 : 1.0);
+                    double angle = s * M_PI / 4;
+                    Vector y_rotation_transform(4, 0.0);
+                    y_rotation_transform(1) = 1.0;
+                    y_rotation_transform(3) = angle;
+                    candidate_pose->pose_rotation = candidate_pose->pose_rotation * yarp::math::axis2dcm(y_rotation_transform).submatrix(0, 2, 0, 2);
+                    candidate_pose->pose_translation = superq_center + (s * candidate_pose->pose_ax_size(2) / norm(gz)) * gz - (0.02 / norm(gx)) * gx;
 
                     if (isCandidateGraspFeasible(candidate_pose))
                     {
