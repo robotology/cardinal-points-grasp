@@ -49,5 +49,5 @@ endif()
 install(TARGETS ${PROJECT_NAME} DESTINATION bin)
 icubcontrib_add_uninstall_target()
 
-file(GLOB scripts ${CMAKE_SOURCE_DIR}/app/scripts/*.xml)
-yarp_install(FILES ${scripts} DESTINATION ${ICUBCONTRIB_APPLICATIONS_INSTALL_DIR})
+file(GLOB scripts ${CMAKE_SOURCE_DIR}/app/scripts/*.template)
+yarp_install(FILES ${scripts} DESTINATION ${ICUBCONTRIB_APPLICATIONS_TEMPLATES_INSTALL_DIR})

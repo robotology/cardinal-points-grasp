@@ -756,8 +756,9 @@ class GraspProcessorModule : public RFModule
         }
         if (!table_ok)
         {
-            yInfo() << "Unable to retrieve table height, using default.";
+            yWarning() << "Unable to retrieve table height, using default.";
         }
+        yInfo() << "Using table height =" << table_height_z;
 
         //  store the context for the previous iKinCartesianController config
         icart->storeContext(&context_backup);
@@ -869,12 +870,12 @@ class GraspProcessorModule : public RFModule
                         if (side_low)
                         {
                             //  lift up the grasp closer to the upper end of the superquadric
-                            candidate_pose->pose_translation(2) = superq_center(2) + candidate_pose->pose_ax_size(1) - (palm_width * 2/3);
+                            candidate_pose->pose_translation(2) = table_height_z + palm_width*2/3;
                         }
                         if (top_low)
                         {
                             //  grab the object with the grasp center on top of the superquadric center
-                            candidate_pose->pose_translation(2) = superq_center(2) - superq_axes_size(2) + finger_length;
+                            candidate_pose->pose_translation(2) = table_height_z + finger_length/2;
                         }
 
                         if (!candidate_pose->setHomogeneousTransform(candidate_pose->pose_rotation, candidate_pose->pose_translation))
