@@ -849,7 +849,7 @@ class GraspProcessorModule : public RFModule
                         y_rotation_transform(1) = 1.0;
                         y_rotation_transform(3) = angle;
                         candidate_pose->pose_rotation = candidate_pose->pose_rotation * yarp::math::axis2dcm(y_rotation_transform).submatrix(0, 2, 0, 2);
-                        candidate_pose->pose_translation = superq_center - ((candidate_pose->pose_ax_size(2) + 0.02) * gz/norm(gz)) - ((0*candidate_pose->pose_ax_size(0) + 0.02) * gx/norm(gx));
+                        candidate_pose->pose_translation = superq_center - (candidate_pose->pose_ax_size(2) * gz/norm(gz)) - 0.02 * gx/norm(gx);
                     }
                     else
                     {
@@ -858,7 +858,7 @@ class GraspProcessorModule : public RFModule
                         y_rotation_transform(1) = 1.0;
                         y_rotation_transform(3) = angle;
                         candidate_pose->pose_rotation = candidate_pose->pose_rotation * yarp::math::axis2dcm(y_rotation_transform).submatrix(0, 2, 0, 2);
-                        candidate_pose->pose_translation = superq_center + ((candidate_pose->pose_ax_size(2) + 0.02) * gz/norm(gz)) - ((0*candidate_pose->pose_ax_size(0) + 0.02) * gx/norm(gx));
+                        candidate_pose->pose_translation = superq_center + (candidate_pose->pose_ax_size(2) * gz/norm(gz)) - 0.02 * gx/norm(gx);
                     }
 
                     if (isCandidateGraspFeasible(candidate_pose))
