@@ -35,16 +35,10 @@ set(sources src/main.cpp src/objectsLib.cpp)
 add_definitions(-D_USE_MATH_DEFINES)
 include_directories(${PROJECT_SOURCE_DIR}/src ${PROJECT_SOURCE_DIR}/include)
 add_executable(${PROJECT_NAME} ${sources} ${headers})
+target_link_libraries(${PROJECT_NAME} ${YARP_LIBRARIES} ${VTK_LIBRARIES})
 
 add_executable(test-grasp-processor src/test_client.cpp)
 target_link_libraries(test-grasp-processor ${YARP_LIBRARIES})
-
-target_link_libraries(${PROJECT_NAME} ${YARP_LIBRARIES})
-if(VTK_LIBRARIES)
-  target_link_libraries(${PROJECT_NAME} ${VTK_LIBRARIES})
-else()
-  target_link_libraries(${PROJECT_NAME} vtkHybrid vtkWidgets)
-endif()
 
 install(TARGETS ${PROJECT_NAME} DESTINATION bin)
 icubcontrib_add_uninstall_target()
