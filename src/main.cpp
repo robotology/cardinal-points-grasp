@@ -669,19 +669,18 @@ class GraspProcessorModule : public RFModule
 
         /*
          * Filtering parameters:
-         * 1 - sufficient height wrt table
-         * 2 - grasp width wrt hand x axis
-         * 3 - sufficient size wrt palm width
-         * 4 - thumb cannot point down
+         * 1 - grasp width wrt hand x axis
+         * 2 - sufficient size wrt palm width
+         * 3 - thumb cannot point down
          */
 
-        bool ok1, ok2, ok3, ok4;
+        bool ok1, ok2, ok3;
         ok1 = candidate_pose->pose_translation(2) - palm_width/2 > table_height_z;
-        ok2 = candidate_pose->pose_ax_size(0) * 2 < grasp_diameter;
-        ok3 = candidate_pose->pose_ax_size(1) * 2 > palm_width/2;
-        ok4 = dot(candidate_pose->pose_rotation.getCol(1), root_z_axis) <= 0.1;
+        ok1 = candidate_pose->pose_ax_size(0) * 2 < grasp_diameter;
+        ok2 = candidate_pose->pose_ax_size(1) * 2 > palm_width/2;
+        ok3 = dot(candidate_pose->pose_rotation.getCol(1), root_z_axis) <= 0.1;
 
-        return (ok1 && ok2 && ok3 && ok4);
+        return (ok1 && ok2 && ok3);
     }
 
     /****************************************************************/
