@@ -548,8 +548,9 @@ class GraspProcessorModule : public RFModule
                centroid[i] = 0.5 * (bounds[i<<1] + bounds[(i<<1)+1]);
                bb = std::max(bb, bounds[(i<<1)+1] - bounds[i<<1]);
            }
+           bb *= 3.0;
 
-           vtk_camera->SetPosition(centroid[0] + 3.0 * bb, centroid[1], centroid[2]);
+           vtk_camera->SetPosition(centroid[0] + bb, centroid[1], centroid[2] + bb);
            vtk_camera->SetViewUp(0.0, 0.0, 1.0);
            vtk_camera->SetFocalPoint(centroid.data());
        }
@@ -849,7 +850,7 @@ class GraspProcessorModule : public RFModule
                     y_rotation_transform(1) = 1.0;
                     y_rotation_transform(3) = angle;
                     candidate_pose->pose_rotation = candidate_pose->pose_rotation * yarp::math::axis2dcm(y_rotation_transform).submatrix(0, 2, 0, 2);
-                    candidate_pose->pose_translation = superq_center + (s * candidate_pose->pose_ax_size(2) / norm(gz)) * gz - (0.02 / norm(gx)) * gx;
+                    candidate_pose->pose_translation = superq_center + (s * candidate_pose->pose_ax_size(2) / norm(gz)) * gz - (0.01 / norm(gx)) * gx;
 
                     if (isCandidateGraspFeasible(candidate_pose))
                     {
