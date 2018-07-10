@@ -845,7 +845,7 @@ class GraspProcessorModule : public RFModule
                     //  the placement of the hand wrt the superquadric center depends on the size along gx
 
                     double s = (grasping_hand == WhichHand::HAND_RIGHT ? -1.0 : 1.0);
-                    double angle = s * M_PI / 4;
+                    double angle = s * 38.0 * (M_PI/180.0);
                     Vector y_rotation_transform(4, 0.0);
                     y_rotation_transform(1) = 1.0;
                     y_rotation_transform(3) = angle;
@@ -861,12 +861,12 @@ class GraspProcessorModule : public RFModule
                         if (side_low)
                         {
                             //  lift up the grasp closer to the upper end of the superquadric
-                            candidate_pose->pose_translation(2) = table_height_z + palm_width*2/3;
+                            candidate_pose->pose_translation(2) = table_height_z + 0.6 * palm_width;
                         }
                         if (top_low)
                         {
                             //  grab the object with the grasp center on top of the superquadric center
-                            candidate_pose->pose_translation(2) = table_height_z + finger_length/2;
+                            candidate_pose->pose_translation(2) = table_height_z + 0.4 * finger_length;
                         }
 
                         if (!candidate_pose->setHomogeneousTransform(candidate_pose->pose_rotation, candidate_pose->pose_translation))
