@@ -165,9 +165,9 @@ class GraspProcessorModule : public RFModule
 
     bool configure(ResourceFinder &rf) override
     {
-
         moduleName = rf.check("name", Value("graspProcessor")).toString();
         robot = (rf.check("sim")? "icubSim" : "icub");
+        string control_arms = rf.check("control-arms", Value("both")).toString();
         x = rf.check("x", Value(0)).asInt();
         y = rf.check("y", Value(0)).asInt();
         w = rf.check("width", Value(600)).asInt();
@@ -191,9 +191,25 @@ class GraspProcessorModule : public RFModule
         table_calib_rpc.open("/" + moduleName + "/tableCalib:rpc");
         module_rpc.open("/" + moduleName + "/cmd:rpc");
 
-        //  open client and view
-        if(!(left_arm_client.open(optionLeftArm) && right_arm_client.open(optionRightArm)))
-            return false;
+        //  open clients
+        if ((control_arms=="both") || (control_arms=="left"))
+        {
+            if (!left_arm_client.open(optionLeftArm))
+            {
+                return false;
+            }
+        }
+        if ((control_arms=="both") || (control_arms=="right"))
+        {
+            if (!right_arm_client.open(optionRightArm))
+            {
+                if (left_arm_client.isValid())
+                {
+                    left_arm_client.close();
+                }
+                return false;
+            }
+        }
 
         //  attach callback
         attach(module_rpc);
@@ -306,9 +322,16 @@ class GraspProcessorModule : public RFModule
         action_render_rpc.close();
         reach_calib_rpc.close();
         module_rpc.close();
-        left_arm_client.close();
-        right_arm_client.close();
         table_calib_rpc.close();
+
+        if (left_arm_client.isValid())
+        {
+            left_arm_client.close();
+        }
+        if (right_arm_client.isValid())
+        {
+            right_arm_client.close();
+        }
 
         return true;
     }
@@ -723,11 +746,11 @@ class GraspProcessorModule : public RFModule
         //  compute a series of viable grasp candidates according to superquadric parameters
         LockGuard lg(mutex);
 
-        if (grasping_hand == WhichHand::HAND_LEFT)
+        if ((grasping_hand == WhichHand::HAND_LEFT) && left_arm_client.isValid())
         {
             left_arm_client.view(icart);
         }
-        else if (grasping_hand == WhichHand::HAND_RIGHT)
+        else if ((grasping_hand == WhichHand::HAND_RIGHT) && right_arm_client.isValid())
         {
             right_arm_client.view(icart);
         }

@@ -47,6 +47,7 @@ All of these commands (at the moment) return an `ack` if the module reaches the 
 ### Command-line parameters
 - `--name moduleName`: start the module with the desired name (watch out for the port names!). 
 - `--sim`: if you need to use the module with the iCub-SIM.
+- `--control-arms [both|left|right]`: let you specify which arm to control exclusively.
 
 ### Example
 ```
