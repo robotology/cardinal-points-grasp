@@ -237,7 +237,8 @@ class GraspProcessorModule : public RFModule
         vtk_renderer->AddActor(vtk_superquadric->get_actor());
 
         //  set a neutral color for the background
-        vtk_renderer->SetBackground(0.1, 0.2, 0.2);
+        //vtk_renderer->SetBackground(0.1, 0.2, 0.2);
+        vtk_renderer->SetBackground(0.8, 0.8, 0.8);
 
         //  set up root reference frame axes widget
         vtk_axes = vtkSmartPointer<vtkAxesActor>::New();
@@ -929,7 +930,7 @@ class GraspProcessorModule : public RFModule
                         pose_captions[idx*search_space_gy.size() + jdx]->GetCaptionTextProperty()->ShadowOff();
                         pose_captions[idx*search_space_gy.size() + jdx]->GetCaptionTextProperty()->BoldOff();
                         pose_captions[idx*search_space_gy.size() + jdx]->GetCaptionTextProperty()->ItalicOff();
-                        pose_captions[idx*search_space_gy.size() + jdx]->GetCaptionTextProperty()->SetColor(1.0, 1.0, 1.0);
+                        pose_captions[idx*search_space_gy.size() + jdx]->GetCaptionTextProperty()->SetColor(0.1, 0.1, 0.1);
                         pose_captions[idx*search_space_gy.size() + jdx]->SetAttachmentPoint(candidate_pose->pose_vtk_caption_actor->GetAttachmentPoint());
 
                         //  add actor to renderer
