@@ -238,7 +238,7 @@ class GraspProcessorModule : public RFModule
 
         //  set a neutral color for the background
         //vtk_renderer->SetBackground(0.1, 0.2, 0.2);
-        vtk_renderer->SetBackground(0.8, 0.8, 0.8);
+        vtk_renderer->SetBackground(0.6, 0.6, 0.6);
 
         //  set up root reference frame axes widget
         vtk_axes = vtkSmartPointer<vtkAxesActor>::New();
@@ -917,7 +917,7 @@ class GraspProcessorModule : public RFModule
 
                         candidate_pose->pose_vtk_actor->ShallowCopy(pose_actors[idx*search_space_gy.size() + jdx]);
                         pose_actors[idx*search_space_gy.size() + jdx]->AxisLabelsOff();
-                        pose_actors[idx*search_space_gy.size() + jdx]->SetTotalLength(0.02, 0.02, 0.02);
+                        pose_actors[idx*search_space_gy.size() + jdx]->SetTotalLength(0.01, 0.01, 0.01);
                         pose_actors[idx*search_space_gy.size() + jdx]->VisibilityOn();
 
                         pose_captions[idx*search_space_gy.size() + jdx]->VisibilityOn();
@@ -925,7 +925,7 @@ class GraspProcessorModule : public RFModule
                         pose_captions[idx*search_space_gy.size() + jdx]->SetCaption(candidate_pose->pose_vtk_caption_actor->GetCaption());
                         pose_captions[idx*search_space_gy.size() + jdx]->BorderOff();
                         pose_captions[idx*search_space_gy.size() + jdx]->LeaderOn();
-                        pose_captions[idx*search_space_gy.size() + jdx]->GetCaptionTextProperty()->SetFontSize(20);
+                        pose_captions[idx*search_space_gy.size() + jdx]->GetCaptionTextProperty()->SetFontSize(15);
                         pose_captions[idx*search_space_gy.size() + jdx]->GetCaptionTextProperty()->FrameOff();
                         pose_captions[idx*search_space_gy.size() + jdx]->GetCaptionTextProperty()->ShadowOff();
                         pose_captions[idx*search_space_gy.size() + jdx]->GetCaptionTextProperty()->BoldOff();
