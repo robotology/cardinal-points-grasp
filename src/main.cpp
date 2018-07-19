@@ -888,8 +888,8 @@ class GraspProcessorModule : public RFModule
                     if (isCandidateGraspFeasible(candidate_pose))
                     {
                         //  if the grasp is close to the table surface, we need to adjust the pose to avoid collision
-                        bool side_low = is_side_grasp && ((candidate_pose->pose_translation(2) - 0.6 * palm_width) < table_height_z);
-                        bool top_low = !is_side_grasp && ((candidate_pose->pose_translation(2) - 0.4 * finger_length) < table_height_z);
+                        bool side_low = is_side_grasp && ((candidate_pose->pose_translation(2) - palm_width) < table_height_z);
+                        bool top_low = !is_side_grasp && ((candidate_pose->pose_translation(2) - finger_length) < table_height_z);
 
                         if (side_low)
                         {
