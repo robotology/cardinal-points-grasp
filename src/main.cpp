@@ -238,7 +238,7 @@ class GraspProcessorModule : public RFModule
 
         //  set a neutral color for the background
         //vtk_renderer->SetBackground(0.1, 0.2, 0.2);
-        vtk_renderer->SetBackground(0.6, 0.6, 0.6);
+        vtk_renderer->SetBackground(0.8, 0.8, 0.8);
 
         //  set up root reference frame axes widget
         vtk_axes = vtkSmartPointer<vtkAxesActor>::New();
@@ -701,13 +701,22 @@ class GraspProcessorModule : public RFModule
          * 3 - thumb cannot point down
          */
 
-        bool ok1, ok2, ok3;
-        ok1 = candidate_pose->pose_translation(2) - palm_width/2 > table_height_z;
+        bool ok1, ok2, ok3, ok4;
         ok1 = candidate_pose->pose_ax_size(0) * 2 < grasp_diameter;
         ok2 = candidate_pose->pose_ax_size(1) * 2 > palm_width/2;
         ok3 = dot(candidate_pose->pose_rotation.getCol(1), root_z_axis) <= 0.1;
+        if (grasping_hand == WhichHand::HAND_RIGHT)
+        {
+            //  ok if hand z axis points downward
+            ok4 = (dot(candidate_pose->pose_rotation.getCol(2), root_z_axis) <= 0.1);
+        }
+        else
+        {
+            //  ok if hand z axis points upwards
+            ok4 = (dot(candidate_pose->pose_rotation.getCol(2), root_z_axis) >= -0.1);
+        }
 
-        return (ok1 && ok2 && ok3);
+        return (ok1 && ok2 && ok3 && ok4);
     }
 
     /****************************************************************/
@@ -879,8 +888,8 @@ class GraspProcessorModule : public RFModule
                     if (isCandidateGraspFeasible(candidate_pose))
                     {
                         //  if the grasp is close to the table surface, we need to adjust the pose to avoid collision
-                        bool side_low = is_side_grasp && ((candidate_pose->pose_translation(2) - palm_width) < table_height_z);
-                        bool top_low = !is_side_grasp && ((candidate_pose->pose_translation(2) - finger_length) < table_height_z);
+                        bool side_low = is_side_grasp && ((candidate_pose->pose_translation(2) - 0.6 * palm_width) < table_height_z);
+                        bool top_low = !is_side_grasp && ((candidate_pose->pose_translation(2) - 0.4 * finger_length) < table_height_z);
 
                         if (side_low)
                         {
@@ -917,7 +926,7 @@ class GraspProcessorModule : public RFModule
 
                         candidate_pose->pose_vtk_actor->ShallowCopy(pose_actors[idx*search_space_gy.size() + jdx]);
                         pose_actors[idx*search_space_gy.size() + jdx]->AxisLabelsOff();
-                        pose_actors[idx*search_space_gy.size() + jdx]->SetTotalLength(0.01, 0.01, 0.01);
+                        pose_actors[idx*search_space_gy.size() + jdx]->SetTotalLength(0.02, 0.02, 0.02);
                         pose_actors[idx*search_space_gy.size() + jdx]->VisibilityOn();
 
                         pose_captions[idx*search_space_gy.size() + jdx]->VisibilityOn();
