@@ -819,7 +819,6 @@ class GraspProcessorModule : public RFModule
             cap_actor->VisibilityOff();
         }
 
-
         //  get superquadric parameters
         pose_candidates.clear();
         Vector superq_center = vtk_superquadric->getCenter();
@@ -836,6 +835,11 @@ class GraspProcessorModule : public RFModule
         Vector sq_axis_x = superq_mat_orientation.getCol(0);
         Vector sq_axis_y = superq_mat_orientation.getCol(1);
         Vector sq_axis_z = superq_mat_orientation.getCol(2);
+
+        // correct table height
+        Vector table_height_corr = superq_center;
+        table_height_corr[2] = table_height_z;
+        fixReachingOffset(table_height_corr,table_height_corr);
 
         //  create all possible candidates for pose evaluation
         //  create search space for grasp axes x and y
@@ -888,18 +892,18 @@ class GraspProcessorModule : public RFModule
                     if (isCandidateGraspFeasible(candidate_pose))
                     {
                         //  if the grasp is close to the table surface, we need to adjust the pose to avoid collision
-                        bool side_low = is_side_grasp && ((candidate_pose->pose_translation(2) - palm_width) < table_height_z);
-                        bool top_low = !is_side_grasp && ((candidate_pose->pose_translation(2) - finger_length) < table_height_z);
+                        bool side_low = is_side_grasp && ((candidate_pose->pose_translation(2) - 0.4 * palm_width) < table_height_corr[2]);
+                        bool top_low = !is_side_grasp && ((candidate_pose->pose_translation(2) - 0.9 * finger_length) < table_height_corr[2]);
 
                         if (side_low)
                         {
                             //  lift up the grasp closer to the upper end of the superquadric
-                            candidate_pose->pose_translation(2) = table_height_z + 0.6 * palm_width;
+                            candidate_pose->pose_translation(2) = table_height_corr[2] + 0.6 * palm_width;
                         }
                         if (top_low)
                         {
                             //  grab the object with the grasp center on top of the superquadric center
-                            candidate_pose->pose_translation(2) = table_height_z + 0.4 * finger_length;
+                            candidate_pose->pose_translation(2) = table_height_corr[2] + finger_length;
                         }
 
                         if (!candidate_pose->setHomogeneousTransform(candidate_pose->pose_rotation, candidate_pose->pose_translation))
