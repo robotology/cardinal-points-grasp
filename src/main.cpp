@@ -839,7 +839,7 @@ class GraspProcessorModule : public RFModule
         // correct table height
         Vector table_height_corr = superq_center;
         table_height_corr[2] = table_height_z;
-        fixReachingOffset(table_height_corr,table_height_corr);
+        fixReachingOffset(table_height_corr,table_height_corr,true);
 
         //  create all possible candidates for pose evaluation
         //  create search space for grasp axes x and y
@@ -1025,7 +1025,8 @@ class GraspProcessorModule : public RFModule
     }
 
     /****************************************************************/
-    bool fixReachingOffset(const Vector &poseToFix, Vector &poseFixed)
+    bool fixReachingOffset(const Vector &poseToFix, Vector &poseFixed,
+                           const bool invert=false)
     {
         //  fix the pose offset accordint to iolReachingCalibration
         //  pose is supposed to be (x y z gx gy gz theta)
@@ -1044,6 +1045,7 @@ class GraspProcessorModule : public RFModule
         command.addDouble(poseToFix(0));    //  x value
         command.addDouble(poseToFix(1));    //  y value
         command.addDouble(poseToFix(2));    //  z value
+        command.addInt(invert?1:0);         //  flag to invert input/output map
 
         reach_calib_rpc.write(command, reply);
 
