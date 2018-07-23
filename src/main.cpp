@@ -740,7 +740,7 @@ class GraspProcessorModule : public RFModule
         Matrix orientation_error_matrix =  candidate_pose->pose_rotation * tmp.transposed();
         Vector orientation_error_vector = dcm2axis(orientation_error_matrix);
 
-        candidate_pose->pose_cost_function(1) = norm(orientation_error_vector.subVector(0,2) * sin(orientation_error_vector(3))) / norm(orientation_error_vector.subVector(0,2));
+        candidate_pose->pose_cost_function(1) = norm(orientation_error_vector.subVector(0,2)) * fabs(sin(orientation_error_vector(3));
 
 
         candidate_pose->pose_cost_function(1) = 0.5*candidate_pose->pose_cost_function(1) + 0.5*(1-candidate_pose->pose_ax_size(1)/yarp::math::findMax(candidate_pose->pose_ax_size));
@@ -977,8 +977,9 @@ class GraspProcessorModule : public RFModule
             //  precision of less than 1 cm is not accepted
             if (pose_candidates[0]->pose_cost_function(0) < 0.01)
             {
+                double min_pose_cost_function_0 = best_candidate->pose_cost_function(0);
                 best_candidate = pose_candidates[0];
-                for(size_t idx = 1; (idx < pose_candidates.size()) && (pose_candidates[idx]->pose_cost_function(0) < 0.01); idx++)
+                for (size_t idx = 1; (idx < pose_candidates.size()) && (pose_candidates[idx]->pose_cost_function(0) - min_pose_cost_function_0 < 0.002); idx++)
                 {
                     if (pose_candidates[idx]->pose_cost_function(1) < best_candidate->pose_cost_function(1))
                     {
