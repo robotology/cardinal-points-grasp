@@ -157,7 +157,6 @@ class GraspProcessorModule : public RFModule
     //  filtering constants
     double table_height_z;
     double palm_width;
-    double grasp_diameter;
     double finger_length;
 
     //  visualization parameters
@@ -702,7 +701,7 @@ class GraspProcessorModule : public RFModule
          */
 
         bool ok1, ok2, ok3, ok4;
-        ok1 = candidate_pose->pose_ax_size(0) * 2 < grasp_diameter;
+        ok1 = candidate_pose->pose_ax_size(0) * 2 < 1.5 * finger_length;
         ok2 = candidate_pose->pose_ax_size(1) * 2 > palm_width/2;
         ok3 = dot(candidate_pose->pose_rotation.getCol(1), root_z_axis) <= 0.1;
         if (grasping_hand == WhichHand::HAND_RIGHT)
@@ -1161,7 +1160,7 @@ class GraspProcessorModule : public RFModule
 
 public:
     GraspProcessorModule(): closing(false), table_height_z(-0.15), palm_width(0.08),
-        finger_length(0.08), grasp_diameter(0.08), grasping_hand(WhichHand::HAND_RIGHT)  {}
+        finger_length(0.08), grasping_hand(WhichHand::HAND_RIGHT)  {}
 
 };
 
