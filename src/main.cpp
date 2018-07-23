@@ -898,12 +898,12 @@ class GraspProcessorModule : public RFModule
                         if (side_low)
                         {
                             //  lift up the grasp closer to the upper end of the superquadric
-                            candidate_pose->pose_translation(2) = table_height_corr[2] + 0.6 * palm_width;
+                            candidate_pose->pose_translation(2) = table_height_corr[2] + 0.4 * palm_width;
                         }
                         if (top_low)
                         {
                             //  grab the object with the grasp center on top of the superquadric center
-                            candidate_pose->pose_translation(2) = table_height_corr[2] + finger_length;
+                            candidate_pose->pose_translation(2) = table_height_corr[2] + 0.8 * finger_length;
                         }
 
                         if (!candidate_pose->setHomogeneousTransform(candidate_pose->pose_rotation, candidate_pose->pose_translation))
