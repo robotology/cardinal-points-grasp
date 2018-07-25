@@ -1029,38 +1029,47 @@ class GraspProcessorModule : public RFModule
     {
         //  fix the pose offset accordint to iolReachingCalibration
         //  pose is supposed to be (x y z gx gy gz theta)
-        Bottle command, reply;
-
-        command.addString("get_location_nolook");
-        if (grasping_hand == WhichHand::HAND_LEFT)
+        if (robot == "icub")
         {
-            command.addString("iol-left");
+            Bottle command, reply;
+
+            command.addString("get_location_nolook");
+            if (grasping_hand == WhichHand::HAND_LEFT)
+            {
+                command.addString("iol-left");
+            }
+            else
+            {
+                command.addString("iol-right");
+            }
+
+            command.addDouble(poseToFix(0));    //  x value
+            command.addDouble(poseToFix(1));    //  y value
+            command.addDouble(poseToFix(2));    //  z value
+            command.addInt(invert?1:0);         //  flag to invert input/output map
+
+            reach_calib_rpc.write(command, reply);
+
+            //  incoming reply is going to be (success x y z)
+            if (reply.get(0).asString() == "ok")
+            {
+                poseFixed = poseToFix;
+                poseFixed(0) = reply.get(1).asDouble();
+                poseFixed(1) = reply.get(2).asDouble();
+                poseFixed(2) = reply.get(3).asDouble();
+                return true;
+            }
+            else
+            {
+                yError() << "Failure retrieving fixed pose";
+                return false;
+            }
         }
         else
         {
-            command.addString("iol-right");
-        }
-
-        command.addDouble(poseToFix(0));    //  x value
-        command.addDouble(poseToFix(1));    //  y value
-        command.addDouble(poseToFix(2));    //  z value
-        command.addInt(invert?1:0);         //  flag to invert input/output map
-
-        reach_calib_rpc.write(command, reply);
-
-        //  incoming reply is going to be (success x y z)
-        if (reply.get(0).asString() == "ok")
-        {
+            //  if we are working with the simulator, the pose doesn't need to be corrected
             poseFixed = poseToFix;
-            poseFixed(0) = reply.get(1).asDouble();
-            poseFixed(1) = reply.get(2).asDouble();
-            poseFixed(2) = reply.get(3).asDouble();
             return true;
-        }
-        else
-        {
-            yError() << "Failure retrieving fixed pose";
-            return false;
         }
     }
 
@@ -1076,16 +1085,7 @@ class GraspProcessorModule : public RFModule
         shared_ptr<GraspPose> best_pose;
         if(getBestCandidatePose(best_pose))
         {
-            if (robot == "icub")
-            {
-                success = fixReachingOffset(best_pose->getPose(), pose);
-            }
-            else
-            {
-                //  no need to fix the offset in simulation
-                pose = best_pose->getPose();
-                success = true;
-            }
+            success = fixReachingOffset(best_pose->getPose(), pose);
         }
 
         return success;
