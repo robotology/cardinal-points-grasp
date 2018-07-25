@@ -740,7 +740,7 @@ class GraspProcessorModule : public RFModule
         Matrix orientation_error_matrix =  candidate_pose->pose_rotation * tmp.transposed();
         Vector orientation_error_vector = dcm2axis(orientation_error_matrix);
 
-        candidate_pose->pose_cost_function(1) = norm(orientation_error_vector.subVector(0,2)) * fabs(sin(orientation_error_vector(3));
+        candidate_pose->pose_cost_function(1) = norm(orientation_error_vector.subVector(0,2)) * fabs(sin(orientation_error_vector(3)));
 
 
         candidate_pose->pose_cost_function(1) = 0.5*candidate_pose->pose_cost_function(1) + 0.5*(1-candidate_pose->pose_ax_size(1)/yarp::math::findMax(candidate_pose->pose_ax_size));
