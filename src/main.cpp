@@ -1030,7 +1030,7 @@ class GraspProcessorModule : public RFModule
     {
         //  fix the pose offset accordint to iolReachingCalibration
         //  pose is supposed to be (x y z gx gy gz theta)
-        if (robot == "icub")
+        if (robot == "icub" && reach_calib_rpc.getOutputCount() > 0)
         {
             Bottle command, reply;
 
@@ -1070,6 +1070,7 @@ class GraspProcessorModule : public RFModule
         {
             //  if we are working with the simulator, the pose doesn't need to be corrected
             poseFixed = poseToFix;
+            yWarning() << "Connection to iolReachingCalibration not detected: pose will not be changed";
             return true;
         }
     }
