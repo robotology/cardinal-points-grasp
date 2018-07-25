@@ -373,7 +373,7 @@ class GraspProcessorModule : public RFModule
                 return true;
             }
             PointCloud<DataXYZRGBA> pc;
-            yDebug() << "Requested object: " << obj;          
+            yDebug() << "Requested object: " << obj;
             if (requestRefreshPointCloud(pc, obj))
             {
                 if (requestRefreshSuperquadric(pc))
@@ -977,8 +977,8 @@ class GraspProcessorModule : public RFModule
             //  precision of less than 1 cm is not accepted
             if (pose_candidates[0]->pose_cost_function(0) < 0.01)
             {
-                double min_pose_cost_function_0 = best_candidate->pose_cost_function(0);
                 best_candidate = pose_candidates[0];
+                double min_pose_cost_function_0 = best_candidate->pose_cost_function(0);
                 for (size_t idx = 1; (idx < pose_candidates.size()) && (pose_candidates[idx]->pose_cost_function(0) - min_pose_cost_function_0 < 0.002); idx++)
                 {
                     if (pose_candidates[idx]->pose_cost_function(1) < best_candidate->pose_cost_function(1))
