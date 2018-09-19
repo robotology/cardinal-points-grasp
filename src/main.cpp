@@ -513,6 +513,38 @@ class GraspProcessorModule : public RFModule
             }
         }
 
+        if (command.get(0).toString() == "drop")
+        {
+            //  Just relay the command forward to actionsRenderingEngine
+            if (action_render_rpc.getOutputCount() > 0)
+            {
+                Bottle cmd, reply;
+                cmd.addString("drop");
+                action_render_rpc.write(cmd, reply);
+                cmd_success = (reply.toString() == "[ack]") ? true:false;
+            }
+            else
+            {
+                cmd_success = false;
+            }
+        }
+
+        if (command.get(0).toString() == "home")
+        {
+            //  Just relay the command forward to actionsRenderingEngine
+            if (action_render_rpc.getOutputCount() > 0)
+            {
+                Bottle cmd, reply;
+                cmd.addString("home");
+                action_render_rpc.write(cmd, reply);
+                cmd_success = (reply.toString() == "[ack]") ? true:false;
+            }
+            else
+            {
+                cmd_success = false;
+            }
+        }
+
         reply.addVocab(Vocab::encode(cmd_success ? "ack":"nack"));
 
         return true;
