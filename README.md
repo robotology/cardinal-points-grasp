@@ -38,9 +38,9 @@ The module visualizes the point cloud, superquadric, and suitable grasps. The be
 
 Once all the modules are running and connected (the code comes with a `yarpmanager` app to keep track of the connections) it can be interacted via RPC calls to `/graspProcessor/cmd:rpc`. The available commands are as follows:
 
-- `grasp_pose objectToGrasp hand` triggers the synthesis of a suitable grasp _without_ executing it. The grasp gets displayed on the visualizer.
+- `grasp_pose objectToGrasp hand [gaze]` triggers the synthesis of a suitable grasp _without_ executing it. The grasp gets displayed on the visualizer. The optional parameter makes the robot fixate the object before acquiring its point cloud. 
 - `grasp_pose_from_file objectToGrasp hand` same as previous command, but the point cloud gets parsed from a `.off` (examples are provided with the code) and therefore there is no call to `point-cloud-read`. 
-- `grasp objectToGrasp hand` generates a good grasp position/pose and executes it with the requested hand. 
+- `grasp objectToGrasp hand [gaze]` generates a good grasp position/pose and executes it with the requested hand. The optional parameter makes the robot fixate the object before acquiring its point cloud. 
 
 All of these commands (at the moment) return an `ack` if the module reaches the end of the procedure, otherwise `nack`
 
