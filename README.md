@@ -41,6 +41,8 @@ Once all the modules are running and connected (the code comes with a `yarpmanag
 - `grasp_pose objectToGrasp hand [gaze]` triggers the synthesis of a suitable grasp _without_ executing it. The grasp gets displayed on the visualizer. The optional parameter makes the robot fixate the object before acquiring its point cloud. 
 - `grasp_pose_from_file objectToGrasp hand` same as previous command, but the point cloud gets parsed from a `.off` (examples are provided with the code) and therefore there is no call to `point-cloud-read`. 
 - `grasp objectToGrasp hand [gaze]` generates a good grasp position/pose and executes it with the requested hand. The optional parameter makes the robot fixate the object before acquiring its point cloud. 
+- `home` relays a homing command to IOL, moving the robot in the ready state.
+- `drop` the robot gently drops the object in front of him. 
 
 All of these commands (at the moment) return an `ack` if the module reaches the end of the procedure, otherwise `nack`
 
