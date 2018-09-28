@@ -345,11 +345,12 @@ class GraspProcessorModule : public RFModule
         Vector grasp_pose(7, 0.0);
         string obj;
         string hand;
+        bool fixate_object = false;
 
         if (command.get(0).toString() == "grasp_pose")
         {
             //  normal operation
-            if (command.size() == 3)
+            if (command.size() == 3 || command.size() == 4)
             {
                 obj = command.get(1).toString();
                 hand = command.get(2).toString();
@@ -366,6 +367,11 @@ class GraspProcessorModule : public RFModule
                     reply.addVocab(Vocab::encode("nack"));
                     return true;
                 }
+                if (command.size() == 4 && command.get(3).toString() == "gaze")
+                {
+                    fixate_object = true;
+                }
+
             }
             else
             {
@@ -374,7 +380,7 @@ class GraspProcessorModule : public RFModule
             }
             PointCloud<DataXYZRGBA> pc;
             yDebug() << "Requested object: " << obj;
-            if (requestRefreshPointCloud(pc, obj))
+            if (requestRefreshPointCloud(pc, obj, fixate_object))
             {
                 if (requestRefreshSuperquadric(pc))
                 {
@@ -387,7 +393,7 @@ class GraspProcessorModule : public RFModule
         if (command.get(0).toString() == "grasp")
         {
             //  obtain grasp and render it
-            if (command.size() == 3)
+            if (command.size() == 3 || command.size() == 4)
             {
                 obj = command.get(1).toString();
                 hand = command.get(2).toString();
@@ -404,6 +410,11 @@ class GraspProcessorModule : public RFModule
                     reply.addVocab(Vocab::encode("nack"));
                     return true;
                 }
+                if (command.size() == 4 && command.get(3).toString() == "gaze")
+                {
+                    fixate_object = true;
+                }
+
             }
             else
             {
@@ -412,7 +423,7 @@ class GraspProcessorModule : public RFModule
             }
             PointCloud<DataXYZRGBA> pc;
             yDebug() << "Requested object: " << obj;
-            if (requestRefreshPointCloud(pc, obj))
+            if (requestRefreshPointCloud(pc, obj, fixate_object))
             {
                 if (requestRefreshSuperquadric(pc))
                 {
@@ -641,7 +652,7 @@ class GraspProcessorModule : public RFModule
     }
 
     /****************************************************************/
-    bool requestRefreshPointCloud(PointCloud<DataXYZRGBA> &point_cloud, const string &object)
+    bool requestRefreshPointCloud(PointCloud<DataXYZRGBA> &point_cloud, const string &object, const bool &fixate_object = false)
     {
         //  query point-cloud-read via rpc for the point cloud
         //  command: get_point_cloud objectName
@@ -650,15 +661,19 @@ class GraspProcessorModule : public RFModule
         Bottle cmd_request;
         Bottle cmd_reply;
 
-        cmd_request.addString("look");
-        cmd_request.addString(object);
-        cmd_request.addString("wait");
-
-        action_render_rpc.write(cmd_request, cmd_reply);
-        if (cmd_reply.toString() != "[ack]")
+        //  if fixate_object is given, look at the object before acquiring the point cloud
+        if (fixate_object)
         {
-            yError() << "Didn't manage to look at the object";
-            return false;
+            cmd_request.addString("look");
+            cmd_request.addString(object);
+            cmd_request.addString("wait");
+
+            action_render_rpc.write(cmd_request, cmd_reply);
+            if (cmd_reply.toString() != "[ack]")
+            {
+                yError() << "Didn't manage to look at the object";
+                return false;
+            }
         }
 
         point_cloud.clear();
