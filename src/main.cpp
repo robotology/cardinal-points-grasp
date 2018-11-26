@@ -51,6 +51,7 @@ using namespace std;
 using namespace yarp::os;
 using namespace yarp::sig;
 using namespace yarp::dev;
+using namespace yarp::math;
 
 Mutex mutex;
 
@@ -732,13 +733,29 @@ class GraspProcessorModule : public RFModule
     }
 
     /****************************************************************/
-    bool isCandidateGraspFeasible(shared_ptr<GraspPose> &candidate_pose)
+    bool isCandidateGraspFeasible(const Vector &super_quadric_parameters, const Matrix &candidate_pose)
     {
         //  filter candidate grasp. True for good grasp
+
         Vector root_z_axis(3, 0.0);
         root_z_axis(2) = 1;
 
-        using namespace yarp::math;
+        Vector superq_XYZW_orientation = super_quadric_parameters.subVector(3,6);
+        Matrix superq_mat_orientation = axis2dcm(superq_XYZW_orientation).submatrix(0,2, 0,2);
+        Vector superq_axes_size = super_quadric_parameters.subVector(7,9);
+        Matrix pose_mat_rotation = candidate_pose.submatrix(0,2, 0,2);
+
+        Matrix pose_superq_mat_rotation = pose_mat_rotation.transposed() * superq_mat_orientation;
+        Vector pose_ax_size(3, 0.0);
+        for(int i=0 ; i<3 ; i++)
+        {
+            for(int j=0 ; j<3 ; j++)
+            {
+                double v = pose_superq_mat_rotation(i,j) * superq_axes_size[j];
+                pose_ax_size[i] += v*v;
+            }
+            pose_ax_size[i] = sqrt(pose_ax_size[i]);
+        }
 
         /*
          * Filtering parameters:
@@ -748,18 +765,18 @@ class GraspProcessorModule : public RFModule
          */
 
         bool ok1, ok2, ok3, ok4;
-        ok1 = candidate_pose->pose_ax_size(0) * 2 < 1.5 * finger_length;
-        ok2 = candidate_pose->pose_ax_size(1) * 2 > palm_width/2;
-        ok3 = dot(candidate_pose->pose_rotation.getCol(1), root_z_axis) <= 0.1;
+        ok1 = pose_ax_size(0) * 2 < 1.5 * finger_length;
+        ok2 = pose_ax_size(1) * 2 > palm_width/2;
+        ok3 = dot(pose_mat_rotation.getCol(1), root_z_axis) <= 0.1;
         if (grasping_hand == WhichHand::HAND_RIGHT)
         {
             //  ok if hand z axis points downward
-            ok4 = (dot(candidate_pose->pose_rotation.getCol(2), root_z_axis) <= 0.1);
+            ok4 = (dot(pose_mat_rotation.getCol(2), root_z_axis) <= 0.1);
         }
         else
         {
             //  ok if hand z axis points upwards
-            ok4 = (dot(candidate_pose->pose_rotation.getCol(2), root_z_axis) >= -0.1);
+            ok4 = (dot(pose_mat_rotation.getCol(2), root_z_axis) >= -0.1);
         }
 
         return (ok1 && ok2 && ok3 && ok4);
@@ -769,7 +786,6 @@ class GraspProcessorModule : public RFModule
     void getPoseCostFunction(shared_ptr<GraspPose> &candidate_pose)
     {
         //  compute precision for movement
-        using namespace yarp::math;
 
         Vector x_d = candidate_pose->pose_translation;
         Vector o_d = dcm2axis(candidate_pose->pose_rotation);
@@ -794,6 +810,125 @@ class GraspProcessorModule : public RFModule
 
         yDebug() << "Cost function: " << candidate_pose->pose_cost_function.toString();
 
+    }
+
+    /****************************************************************/
+    void computeRawGraspPoseCandidates(const Vector &super_quadric_parameters, vector<Matrix> &raw_grasp_pose_candidates)
+    {
+        // compute grasping pose on the different side of the superquadric
+
+        raw_grasp_pose_candidates.clear();
+
+        Vector superq_center = super_quadric_parameters.subVector(0,2);
+        Vector superq_XYZW_orientation = super_quadric_parameters.subVector(3,6);
+        Vector superq_axes_size = super_quadric_parameters.subVector(7,9);
+
+        //  get orientation of the superq in 3x3 rotation matrix form
+
+        Matrix superq_mat_orientation = axis2dcm(superq_XYZW_orientation).submatrix(0,2, 0,2);
+
+        //  columns of rotation matrix are superq axes direction
+        //  in root reference frame;
+        Vector sq_axis_x = superq_mat_orientation.getCol(0);
+        Vector sq_axis_y = superq_mat_orientation.getCol(1);
+        Vector sq_axis_z = superq_mat_orientation.getCol(2);
+
+        //  create all possible candidates for pose evaluation
+        //  create search space for grasp axes x and y
+        vector<Vector> search_space_gx = {sq_axis_x, -1*sq_axis_x, sq_axis_y, -1*sq_axis_y};
+        vector<Vector> search_space_gy = {sq_axis_x, -1*sq_axis_x, sq_axis_y, -1*sq_axis_y, sq_axis_z, -1*sq_axis_z};
+
+        //  create actual candidates
+        for (size_t idx = 0; idx < search_space_gx.size(); idx++)
+        {
+            Vector gx = search_space_gx[idx];
+            //  for each candidate gx axis, try all gy possibilities
+            for (size_t jdx = 0; jdx < search_space_gy.size(); jdx++)
+            {
+                //  create a gx, gy orthogonal couple
+                Vector gy = search_space_gy[jdx];
+                if (dot(gx, gy)*dot(gx, gy) < 0.0001)
+                {
+                    Matrix candidate_pose(4,4);
+                    candidate_pose(3,3) = 1;
+                    //  create gz with cross product
+                    //  create candidate entry
+                    Vector gz = cross(gx, gy);
+
+                    candidate_pose.setSubcol(gx, 0,0);
+                    candidate_pose.setSubcol(gy, 0,1);
+                    candidate_pose.setSubcol(gz, 0,2);
+                    double s = (grasping_hand == WhichHand::HAND_RIGHT ? -1.0 : 1.0);
+                    candidate_pose.setSubcol(superq_center + s * superq_axes_size(3 - idx/2 - jdx/2) / norm(gz) * gz, 0,3);
+
+                    raw_grasp_pose_candidates.push_back(candidate_pose);
+                }
+            }
+        }
+    }
+
+    /****************************************************************/
+    void refineGraspPoseCandidates(const Vector &super_quadric_parameters, const vector<Matrix> &raw_grasp_pose_candidates, vector<Matrix> &refined_grasp_pose_candidates)
+    {
+        // modify the grasping poses to account for the robot and table  geometry and prune the poses that are not realistic
+
+        refined_grasp_pose_candidates.clear();
+
+        // correct table height
+        Vector table_height_corr = super_quadric_parameters.subVector(0,2);
+        table_height_corr[2] = table_height_z;
+        fixReachingOffset(table_height_corr,table_height_corr,true);
+
+        for(size_t idx=0 ; idx<raw_grasp_pose_candidates.size() ; idx++)
+        {
+            if (isCandidateGraspFeasible(super_quadric_parameters, raw_grasp_pose_candidates[idx]))
+            {
+                Vector pose_translation = raw_grasp_pose_candidates[idx].subcol(0,3,3);
+                Vector gx = raw_grasp_pose_candidates[idx].subcol(0,0,3);
+                Matrix pose_mat_rotation = raw_grasp_pose_candidates[idx].submatrix(0,2, 0,2);
+
+                //  we can either have side or top grasps.
+                //  it is helpful to have a variable to discriminate the grasp
+                Vector gy = raw_grasp_pose_candidates[idx].subcol(0,1,3);
+                Vector z_root(3, 0.0);
+                z_root(2) = 1.0;
+                bool is_side_grasp = (dot(-1*z_root, gy) > 0.9);
+
+                //  translate the pose along gz and gx according to the palm size
+                //  rotate the pose around the hand y axis
+                //  sign of operations depends upon the hand we are using
+                //  the placement of the hand wrt the superquadric center depends on the size along gx
+
+                double s = (grasping_hand == WhichHand::HAND_RIGHT ? -1.0 : 1.0);
+                double angle = s * 38.0 * (M_PI/180.0);
+                Vector y_rotation_transform(4, 0.0);
+                y_rotation_transform(1) = 1.0;
+                y_rotation_transform(3) = angle;
+                pose_mat_rotation = pose_mat_rotation * yarp::math::axis2dcm(y_rotation_transform).submatrix(0, 2, 0, 2);
+                pose_translation += - (0.01 / norm(gx)) * gx;
+
+                //  if the grasp is close to the table surface, we need to adjust the pose to avoid collision
+                bool side_low = is_side_grasp && ((pose_translation(2) - 0.4 * palm_width) < table_height_corr[2]);
+                bool top_low = !is_side_grasp && ((pose_translation(2) - 0.9 * finger_length) < table_height_corr[2]);
+
+                if (side_low)
+                {
+                    //  lift up the grasp closer to the upper end of the superquadric
+                    pose_translation(2) = table_height_corr[2] + 0.4 * palm_width;
+                }
+                if (top_low)
+                {
+                    //  grab the object with the grasp center on top of the superquadric center
+                    pose_translation(2) = table_height_corr[2] + 0.8 * finger_length;
+                }
+
+                Matrix pose_candidate(4,4);
+                pose_candidate(3,3) = 1;
+                pose_candidate.setSubcol(pose_translation, 0,3);
+                pose_candidate.setSubmatrix(pose_mat_rotation, 0,0);
+                refined_grasp_pose_candidates.push_back(pose_candidate);
+            }
+        }
     }
 
     /****************************************************************/
@@ -866,139 +1001,87 @@ class GraspProcessorModule : public RFModule
         }
 
         //  get superquadric parameters
-        pose_candidates.clear();
+        Vector superq_parameters(10);
         Vector superq_center = vtk_superquadric->getCenter();
+        superq_parameters.setSubvector(0, superq_center);
         Vector superq_XYZW_orientation = vtk_superquadric->getOrientationXYZW();
+        superq_XYZW_orientation[3] *= (M_PI / 180.0);
+        superq_parameters.setSubvector(3, superq_XYZW_orientation);
         Vector superq_axes_size = vtk_superquadric->getAxesSize();
+        superq_parameters.setSubvector(7, superq_axes_size);
 
-        //  get orientation of the superq in 3x3 rotation matrix form
-        using namespace yarp::math;
-        superq_XYZW_orientation(3) /= (180.0 / M_PI);
-        Matrix superq_mat_orientation = axis2dcm(superq_XYZW_orientation).submatrix(0,2, 0,2);
+        vector<Matrix> raw_grasp_pose_candidates;
+        this->computeRawGraspPoseCandidates(superq_parameters, raw_grasp_pose_candidates);
 
-        //  columns of rotation matrix are superq axes direction
-        //  in root reference frame;
-        Vector sq_axis_x = superq_mat_orientation.getCol(0);
-        Vector sq_axis_y = superq_mat_orientation.getCol(1);
-        Vector sq_axis_z = superq_mat_orientation.getCol(2);
+        vector<Matrix> refined_grasp_pose_candidates;
+        this->refineGraspPoseCandidates(superq_parameters, raw_grasp_pose_candidates, refined_grasp_pose_candidates);
 
-        // correct table height
-        Vector table_height_corr = superq_center;
-        table_height_corr[2] = table_height_z;
-        fixReachingOffset(table_height_corr,table_height_corr,true);
-
-        //  create all possible candidates for pose evaluation
-        //  create search space for grasp axes x and y
-        vector<Vector> search_space_gx = {sq_axis_x, -1*sq_axis_x, sq_axis_y, -1*sq_axis_y};
-        vector<Vector> search_space_gy = {sq_axis_x, -1*sq_axis_x, sq_axis_y, -1*sq_axis_y, sq_axis_z, -1*sq_axis_z};
-
-        //  create actual candidates
-        for (size_t idx = 0; idx < search_space_gx.size(); idx++)
+        pose_candidates.clear();
+        for(size_t idx=0 ; idx<refined_grasp_pose_candidates.size() ; idx++)
         {
-            Vector gx = search_space_gx[idx];
-            //  for each candidate gx axis, try all gy possibilities
-            for (size_t jdx = 0; jdx < search_space_gy.size(); jdx++)
+            shared_ptr<GraspPose> candidate_pose = shared_ptr<GraspPose>(new GraspPose);
+
+            candidate_pose->pose_translation = refined_grasp_pose_candidates[idx].subcol(0,3,3);
+            candidate_pose->pose_rotation = refined_grasp_pose_candidates[idx].submatrix(0,2,0,2);
+
+            Matrix superq_mat_orientation = axis2dcm(superq_XYZW_orientation).submatrix(0,2, 0,2);
+
+            Matrix pose_superq_mat_rotation = raw_grasp_pose_candidates[idx].submatrix(0,2,0,2).transposed() * superq_mat_orientation;
+            candidate_pose->pose_ax_size.zero();
+            for(int i=0 ; i<3 ; i++)
             {
-                //  create a gx, gy orthogonal couple
-                Vector gy = search_space_gy[jdx];
-                if (dot(gx, gy)*dot(gx, gy) < 0.0001)
+                for(int j=0 ; j<3 ; j++)
                 {
-                    //  create gz with cross product
-                    //  create candidate entry
-                    Vector gz = cross(gx, gy);
-                    shared_ptr<GraspPose> candidate_pose = shared_ptr<GraspPose>(new GraspPose);
-                    candidate_pose->pose_rotation.setCol(0, gx);
-                    candidate_pose->pose_rotation.setCol(1, gy);
-                    candidate_pose->pose_rotation.setCol(2, gz);
+                    double v = pose_superq_mat_rotation(i,j) * superq_axes_size[j];
+                    candidate_pose->pose_ax_size[i] += v*v;
+                }
+                candidate_pose->pose_ax_size[i] = sqrt(candidate_pose->pose_ax_size[i]);
+            }
 
-                    //  we can either have side or top grasps.
-                    //  it is helpful to have a variable to discriminate the grasp
-                    Vector z_root(3, 0.0);
-                    z_root(2) = 1.0;
-                    bool is_side_grasp = (dot(-1*z_root, gy) > 0.9);
+            if (!candidate_pose->setHomogeneousTransform(candidate_pose->pose_rotation, candidate_pose->pose_translation))
+            {
+                yError() << "Error setting homogeneous transform!";
+                continue;
+            }
 
-                    //  set the superquadric size in the direction of each g_axis
-                    candidate_pose->pose_ax_size(0) = superq_axes_size(idx/2);
-                    candidate_pose->pose_ax_size(1) = superq_axes_size(jdx/2);
-                    candidate_pose->pose_ax_size(2) = superq_axes_size(3 - idx/2 - jdx/2);
+            //  if candidate is good, set vtk transform and actor
+            candidate_pose->setvtkTransform(candidate_pose->pose_transform);
+            candidate_pose->pose_vtk_actor->SetUserTransform(candidate_pose->pose_vtk_transform);
+            pose_actors[idx]->SetUserTransform(candidate_pose->pose_vtk_transform);
 
-                    //  translate the pose along gz and gx according to the palm size
-                    //  rotate the pose around the hand y axis
-                    //  sign of operations depends upon the hand we are using
-                    //  the placement of the hand wrt the superquadric center depends on the size along gx
+            //  calculate the cost function for the pose
+            getPoseCostFunction(candidate_pose);
 
-                    double s = (grasping_hand == WhichHand::HAND_RIGHT ? -1.0 : 1.0);
-                    double angle = s * 38.0 * (M_PI/180.0);
-                    Vector y_rotation_transform(4, 0.0);
-                    y_rotation_transform(1) = 1.0;
-                    y_rotation_transform(3) = angle;
-                    candidate_pose->pose_rotation = candidate_pose->pose_rotation * yarp::math::axis2dcm(y_rotation_transform).submatrix(0, 2, 0, 2);
-                    candidate_pose->pose_translation = superq_center + (s * candidate_pose->pose_ax_size(2) / norm(gz)) * gz - (0.01 / norm(gx)) * gx;
-
-                    if (isCandidateGraspFeasible(candidate_pose))
-                    {
-                        //  if the grasp is close to the table surface, we need to adjust the pose to avoid collision
-                        bool side_low = is_side_grasp && ((candidate_pose->pose_translation(2) - 0.4 * palm_width) < table_height_corr[2]);
-                        bool top_low = !is_side_grasp && ((candidate_pose->pose_translation(2) - 0.9 * finger_length) < table_height_corr[2]);
-
-                        if (side_low)
-                        {
-                            //  lift up the grasp closer to the upper end of the superquadric
-                            candidate_pose->pose_translation(2) = table_height_corr[2] + 0.4 * palm_width;
-                        }
-                        if (top_low)
-                        {
-                            //  grab the object with the grasp center on top of the superquadric center
-                            candidate_pose->pose_translation(2) = table_height_corr[2] + 0.8 * finger_length;
-                        }
-
-                        if (!candidate_pose->setHomogeneousTransform(candidate_pose->pose_rotation, candidate_pose->pose_translation))
-                        {
-                            yError() << "Error setting homogeneous transform!";
-                            continue;
-                        }
-
-                        //  if candidate is good, set vtk transform and actor
-                        candidate_pose->setvtkTransform(candidate_pose->pose_transform);
-                        candidate_pose->pose_vtk_actor->SetUserTransform(candidate_pose->pose_vtk_transform);
-                        pose_actors[idx*search_space_gy.size() + jdx]->SetUserTransform(candidate_pose->pose_vtk_transform);
-
-                        //  calculate the cost function for the pose
-                        getPoseCostFunction(candidate_pose);
-
-                        //  fix graphical properties
+            //  fix graphical properties
 //                        candidate_pose->pose_vtk_actor->AxisLabelsOff();
 //                        candidate_pose->pose_vtk_actor->SetTotalLength(0.02, 0.02, 0.02);
 
-                        stringstream ss;
-                        ss << fixed << setprecision(3) << candidate_pose->pose_cost_function(0) << "_" << fixed << setprecision(3) << candidate_pose->pose_cost_function(1);
-                        candidate_pose->setvtkActorCaption(ss.str());
+            stringstream ss;
+            ss << fixed << setprecision(3) << candidate_pose->pose_cost_function(0) << "_" << fixed << setprecision(3) << candidate_pose->pose_cost_function(1);
+            candidate_pose->setvtkActorCaption(ss.str());
 
-                        candidate_pose->pose_vtk_actor->ShallowCopy(pose_actors[idx*search_space_gy.size() + jdx]);
-                        pose_actors[idx*search_space_gy.size() + jdx]->AxisLabelsOff();
-                        pose_actors[idx*search_space_gy.size() + jdx]->SetTotalLength(0.02, 0.02, 0.02);
-                        pose_actors[idx*search_space_gy.size() + jdx]->VisibilityOn();
+            candidate_pose->pose_vtk_actor->ShallowCopy(pose_actors[idx]);
+            pose_actors[idx]->AxisLabelsOff();
+            pose_actors[idx]->SetTotalLength(0.02, 0.02, 0.02);
+            pose_actors[idx]->VisibilityOn();
 
-                        pose_captions[idx*search_space_gy.size() + jdx]->VisibilityOn();
-                        pose_captions[idx*search_space_gy.size() + jdx]->GetTextActor()->SetTextScaleModeToNone();
-                        pose_captions[idx*search_space_gy.size() + jdx]->SetCaption(candidate_pose->pose_vtk_caption_actor->GetCaption());
-                        pose_captions[idx*search_space_gy.size() + jdx]->BorderOff();
-                        pose_captions[idx*search_space_gy.size() + jdx]->LeaderOn();
-                        pose_captions[idx*search_space_gy.size() + jdx]->GetCaptionTextProperty()->SetFontSize(15);
-                        pose_captions[idx*search_space_gy.size() + jdx]->GetCaptionTextProperty()->FrameOff();
-                        pose_captions[idx*search_space_gy.size() + jdx]->GetCaptionTextProperty()->ShadowOff();
-                        pose_captions[idx*search_space_gy.size() + jdx]->GetCaptionTextProperty()->BoldOff();
-                        pose_captions[idx*search_space_gy.size() + jdx]->GetCaptionTextProperty()->ItalicOff();
-                        pose_captions[idx*search_space_gy.size() + jdx]->GetCaptionTextProperty()->SetColor(0.1, 0.1, 0.1);
-                        pose_captions[idx*search_space_gy.size() + jdx]->SetAttachmentPoint(candidate_pose->pose_vtk_caption_actor->GetAttachmentPoint());
+            pose_captions[idx]->VisibilityOn();
+            pose_captions[idx]->GetTextActor()->SetTextScaleModeToNone();
+            pose_captions[idx]->SetCaption(candidate_pose->pose_vtk_caption_actor->GetCaption());
+            pose_captions[idx]->BorderOff();
+            pose_captions[idx]->LeaderOn();
+            pose_captions[idx]->GetCaptionTextProperty()->SetFontSize(15);
+            pose_captions[idx]->GetCaptionTextProperty()->FrameOff();
+            pose_captions[idx]->GetCaptionTextProperty()->ShadowOff();
+            pose_captions[idx]->GetCaptionTextProperty()->BoldOff();
+            pose_captions[idx]->GetCaptionTextProperty()->ItalicOff();
+            pose_captions[idx]->GetCaptionTextProperty()->SetColor(0.1, 0.1, 0.1);
+            pose_captions[idx]->SetAttachmentPoint(candidate_pose->pose_vtk_caption_actor->GetAttachmentPoint());
 
-                        //  add actor to renderer
-                        //vtk_renderer->AddActor(candidate_pose->pose_vtk_actor);
-                        //vtk_renderer->AddActor(candidate_pose->pose_vtk_caption_actor);
-                        pose_candidates.push_back(candidate_pose);
-                    }
-                }
-            }
+            //  add actor to renderer
+            //vtk_renderer->AddActor(candidate_pose->pose_vtk_actor);
+            //vtk_renderer->AddActor(candidate_pose->pose_vtk_caption_actor);
+            pose_candidates.push_back(candidate_pose);
         }
 
         //  restore previous context
