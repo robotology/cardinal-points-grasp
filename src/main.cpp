@@ -557,6 +557,94 @@ class GraspProcessorModule : public RFModule
             }
         }
 
+        if (command.get(0).toString() == "get_raw_grasp_poses")
+        {
+            // compute raw grasp poses candidates from superquadric parameters
+            // superquadric parameters (center_x center_y center_z rot_axis_x rot_axis_y rot_axis_z angle axis_size_1 axis_size_2 axis_size_3)
+            if (command.size() > 10)
+            {
+                Vector super_quadric_parameters(10);
+                for(int i=0 ; i<10 ; i++) super_quadric_parameters[i] = command.get(i+1).asDouble();
+
+                vector<Matrix> raw_grasp_pose_candidates;
+                this->computeRawGraspPoseCandidates(super_quadric_parameters, raw_grasp_pose_candidates);
+
+                for(int i=0 ; i<raw_grasp_pose_candidates.size() ; i++)
+                {
+                    for(int j=0 ; j<3 ; j++) reply.addDouble(raw_grasp_pose_candidates[i](j,3));
+                    Vector orientation = dcm2axis(raw_grasp_pose_candidates[i]);
+                    for(int j=0 ; j<4 ; j++) reply.addDouble(orientation[j]);
+                }
+                return true;
+            }
+            else
+            {
+                reply.addVocab(Vocab::encode("nack"));
+                return true;
+            }
+        }
+
+        if (command.get(0).toString() == "refine_grasp_pose")
+        {
+            // refine a grasp pose candidate to be compatible with the robot constraints
+            // superquadric parameters (center_x center_y center_z rot_axis_x rot_axis_y rot_axis_z angle axis_size_1 axis_size_2 axis_size_3)
+            // pose candidate (t_x t_y t_z rot_axis_x rot_axis_y rot_axis_z angle)
+            if (command.size() > 17)
+            {
+                if (command.size() > 18)
+                {
+                    hand = command.get(18).toString();
+                    if (hand == "right")
+                    {
+                        grasping_hand = WhichHand::HAND_RIGHT;
+                    }
+                    else if (hand == "left")
+                    {
+                        grasping_hand = WhichHand::HAND_LEFT;
+                    }
+                    else
+                    {
+                        reply.addVocab(Vocab::encode("nack"));
+                        return true;
+                    }
+                }
+
+                Vector super_quadric_parameters(10);
+                for(int i=0 ; i<10 ; i++) super_quadric_parameters[i] = command.get(i+1).asDouble();
+
+                Vector orientation(4, 0.0);
+                for(int i=0 ; i<4 ; i++) orientation[i] = command.get(i+14).asDouble();
+
+                Matrix raw_grasp_pose_candidate = axis2dcm(orientation);
+                raw_grasp_pose_candidate(3,3) = 1;
+                for(int i=0 ; i<3 ; i++) raw_grasp_pose_candidate(i,3) = command.get(i+11).asDouble();
+
+                vector<Matrix> raw_grasp_pose_candidates;
+                raw_grasp_pose_candidates.push_back(raw_grasp_pose_candidate);
+
+                vector<Matrix> refined_grasp_pose_candidates;
+                this->refineGraspPoseCandidates(super_quadric_parameters, raw_grasp_pose_candidates, refined_grasp_pose_candidates);
+
+                if(refined_grasp_pose_candidates.size()>0)
+                {
+                    reply.addString("ok");
+                    for(int i=0 ; i<3 ; i++) reply.addDouble(refined_grasp_pose_candidates.front()(i,3));
+                    Vector orientation = dcm2axis(refined_grasp_pose_candidates.front());
+                    for(int i=0 ; i<4 ; i++) reply.addDouble(orientation[i]);
+                }
+                else
+                {
+                    reply.addString("nok");
+                }
+                return true;
+            }
+            else
+            {
+                reply.addVocab(Vocab::encode("nack"));
+                return true;
+            }
+        }
+
         reply.addVocab(Vocab::encode(cmd_success ? "ack":"nack"));
 
         return true;
