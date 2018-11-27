@@ -625,7 +625,7 @@ class GraspProcessorModule : public RFModule
                 vector<Matrix> refined_grasp_pose_candidates;
                 this->refineGraspPoseCandidates(super_quadric_parameters, raw_grasp_pose_candidates, refined_grasp_pose_candidates);
 
-                if(refined_grasp_pose_candidates.size()>0)
+                if((refined_grasp_pose_candidates.front().cols()==4) && (refined_grasp_pose_candidates.front().rows()==4))
                 {
                     reply.addString("ok");
                     for(int i=0 ; i<3 ; i++) reply.addDouble(refined_grasp_pose_candidates.front()(i,3));
@@ -1016,6 +1016,10 @@ class GraspProcessorModule : public RFModule
                 pose_candidate.setSubmatrix(pose_mat_rotation, 0,0);
                 refined_grasp_pose_candidates.push_back(pose_candidate);
             }
+            else
+            {
+                refined_grasp_pose_candidates.push_back(Matrix());
+            }
         }
     }
 
@@ -1107,6 +1111,8 @@ class GraspProcessorModule : public RFModule
         pose_candidates.clear();
         for(size_t idx=0 ; idx<refined_grasp_pose_candidates.size() ; idx++)
         {
+            if((refined_grasp_pose_candidates[idx].rows()!=4) || (refined_grasp_pose_candidates[idx].cols()!=4)) continue;
+
             shared_ptr<GraspPose> candidate_pose = shared_ptr<GraspPose>(new GraspPose);
 
             candidate_pose->pose_translation = refined_grasp_pose_candidates[idx].subcol(0,3,3);
@@ -1116,6 +1122,7 @@ class GraspProcessorModule : public RFModule
 
             Matrix pose_superq_mat_rotation = raw_grasp_pose_candidates[idx].submatrix(0,2,0,2).transposed() * superq_mat_orientation;
             candidate_pose->pose_ax_size.zero();
+
             for(int i=0 ; i<3 ; i++)
             {
                 for(int j=0 ; j<3 ; j++)
