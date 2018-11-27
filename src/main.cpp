@@ -159,6 +159,8 @@ class GraspProcessorModule : public RFModule
     double table_height_z;
     double palm_width;
     double finger_length;
+    Matrix grasper_specific_transform_right;
+    Matrix grasper_specific_transform_left;
 
     //  visualization parameters
     int x, y, h, w;
@@ -172,6 +174,70 @@ class GraspProcessorModule : public RFModule
         y = rf.check("y", Value(0)).asInt();
         w = rf.check("width", Value(600)).asInt();
         h = rf.check("height", Value(600)).asInt();
+
+        Vector grasp_specific_translation(3, 0.0);
+        Vector grasp_specific_orientation(4, 0.0);
+        Bottle *list = rf.find("grasp_trsfm_right").asList();
+        bool valid_grasp_specific_transform = true;
+
+        if(list)
+        {
+            if(list->size() == 7)
+            {
+                for(int i=0 ; i<3 ; i++) grasp_specific_translation[i] = list->get(i).asDouble();
+                for(int i=0 ; i<4 ; i++) grasp_specific_orientation[i] = list->get(3+i).asDouble();
+            }
+            else
+            {
+                yError()<<"Invalid grasp_trsfm_right format in config";
+                valid_grasp_specific_transform = false;
+            }
+        }
+        else valid_grasp_specific_transform = false;
+
+        if( (!valid_grasp_specific_transform) && ((robot == "icubSim") || (robot == "icub")) )
+        {
+            yInfo()<<"Loading grasp_trsfm_right default value for Icub";
+            grasp_specific_translation[0] = -0.01;
+            grasp_specific_orientation[1] = 1;
+            grasp_specific_orientation[3] = - 38.0 * M_PI/180.0;
+        }
+
+        grasper_specific_transform_right = axis2dcm(grasp_specific_orientation);
+        grasper_specific_transform_right.setSubcol(grasp_specific_translation, 0,3);
+        yInfo()<<"Grabber specific transform for right arm loaded\n"<<grasper_specific_transform_right.toString();
+
+        grasp_specific_translation.zero();
+        grasp_specific_orientation.zero();
+        list = rf.find("grasp_trsfm_left").asList();
+        valid_grasp_specific_transform = true;
+
+        if(list)
+        {
+            if(list->size() == 7)
+            {
+                for(int i=0 ; i<3 ; i++) grasp_specific_translation[i] = list->get(i).asDouble();
+                for(int i=0 ; i<4 ; i++) grasp_specific_orientation[i] = list->get(3+i).asDouble();
+            }
+            else
+            {
+                yError()<<"Invalid grasp_trsfm_left format in config";
+                valid_grasp_specific_transform = false;
+            }
+        }
+        else valid_grasp_specific_transform = false;
+
+        if( (!valid_grasp_specific_transform) && ((robot == "icubSim") || (robot == "icub")) )
+        {
+            yInfo()<<"Loading grasp_trsfm_left default value for Icub";
+            grasp_specific_translation[0] = -0.01;
+            grasp_specific_orientation[1] = 1;
+            grasp_specific_orientation[3] = + 38.0 * M_PI/180.0;
+        }
+
+        grasper_specific_transform_left = axis2dcm(grasp_specific_orientation);
+        grasper_specific_transform_left.setSubcol(grasp_specific_translation, 0,3);
+        yInfo()<<"Grabber specific transform for left arm loaded\n"<<grasper_specific_transform_left.toString();
 
         Property optionLeftArm, optionRightArm;
 
@@ -969,15 +1035,12 @@ class GraspProcessorModule : public RFModule
 
         for(size_t idx=0 ; idx<raw_grasp_pose_candidates.size() ; idx++)
         {
-            if (isCandidateGraspFeasible(super_quadric_parameters, raw_grasp_pose_candidates[idx]))
+            Matrix pose_candidate = raw_grasp_pose_candidates[idx];
+            if (isCandidateGraspFeasible(super_quadric_parameters, pose_candidate))
             {
-                Vector pose_translation = raw_grasp_pose_candidates[idx].subcol(0,3,3);
-                Vector gx = raw_grasp_pose_candidates[idx].subcol(0,0,3);
-                Matrix pose_mat_rotation = raw_grasp_pose_candidates[idx].submatrix(0,2, 0,2);
-
                 //  we can either have side or top grasps.
                 //  it is helpful to have a variable to discriminate the grasp
-                Vector gy = raw_grasp_pose_candidates[idx].subcol(0,1,3);
+                Vector gy = pose_candidate.subcol(0,1,3);
                 Vector z_root(3, 0.0);
                 z_root(2) = 1.0;
                 bool is_side_grasp = (dot(-1*z_root, gy) > 0.9);
@@ -987,33 +1050,30 @@ class GraspProcessorModule : public RFModule
                 //  sign of operations depends upon the hand we are using
                 //  the placement of the hand wrt the superquadric center depends on the size along gx
 
-                double s = (grasping_hand == WhichHand::HAND_RIGHT ? -1.0 : 1.0);
-                double angle = s * 38.0 * (M_PI/180.0);
-                Vector y_rotation_transform(4, 0.0);
-                y_rotation_transform(1) = 1.0;
-                y_rotation_transform(3) = angle;
-                pose_mat_rotation = pose_mat_rotation * yarp::math::axis2dcm(y_rotation_transform).submatrix(0, 2, 0, 2);
-                pose_translation += - (0.01 / norm(gx)) * gx;
+                if(grasping_hand == WhichHand::HAND_RIGHT)
+                {
+                    pose_candidate = pose_candidate * grasper_specific_transform_right;
+                }
+                else
+                {
+                    pose_candidate = pose_candidate * grasper_specific_transform_left;
+                }
 
                 //  if the grasp is close to the table surface, we need to adjust the pose to avoid collision
-                bool side_low = is_side_grasp && ((pose_translation(2) - 0.4 * palm_width) < table_height_corr[2]);
-                bool top_low = !is_side_grasp && ((pose_translation(2) - 0.9 * finger_length) < table_height_corr[2]);
+                bool side_low = is_side_grasp && ((pose_candidate(2,3) - 0.4 * palm_width) < table_height_corr[2]);
+                bool top_low = !is_side_grasp && ((pose_candidate(2,3) - 0.9 * finger_length) < table_height_corr[2]);
 
                 if (side_low)
                 {
                     //  lift up the grasp closer to the upper end of the superquadric
-                    pose_translation(2) = table_height_corr[2] + 0.4 * palm_width;
+                    pose_candidate(2,3) = table_height_corr[2] + 0.4 * palm_width;
                 }
                 if (top_low)
                 {
                     //  grab the object with the grasp center on top of the superquadric center
-                    pose_translation(2) = table_height_corr[2] + 0.8 * finger_length;
+                    pose_candidate(2,3) = table_height_corr[2] + 0.8 * finger_length;
                 }
 
-                Matrix pose_candidate(4,4);
-                pose_candidate(3,3) = 1;
-                pose_candidate.setSubcol(pose_translation, 0,3);
-                pose_candidate.setSubmatrix(pose_mat_rotation, 0,0);
                 refined_grasp_pose_candidates.push_back(pose_candidate);
             }
             else
@@ -1387,7 +1447,8 @@ class GraspProcessorModule : public RFModule
 
 public:
     GraspProcessorModule(): closing(false), table_height_z(-0.15), palm_width(0.08),
-        finger_length(0.08), grasping_hand(WhichHand::HAND_RIGHT)  {}
+        finger_length(0.08), grasping_hand(WhichHand::HAND_RIGHT), grasper_specific_transform_right(eye(4,4)),
+        grasper_specific_transform_left(eye(4,4)){}
 
 };
 
