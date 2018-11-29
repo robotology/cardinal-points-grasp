@@ -937,32 +937,65 @@ class GraspProcessorModule : public RFModule
     }
 
     /****************************************************************/
-    void getPoseCostFunction(shared_ptr<GraspPose> &candidate_pose)
+    void getPoseCostFunction(const Vector &super_quadric_parameters, const Matrix &candidate_pose, Vector &cost)
     {
+        cost.resize(2, std::numeric_limits<double>::max());
+
+        if(super_quadric_parameters.size() != 10)
+        {
+            yError() << "getPoseCostFunction: invalid superquadric parameters vector dimensions";
+            return;
+        }
+
         //  compute precision for movement
 
-        Vector x_d = candidate_pose->pose_translation;
-        Vector o_d = dcm2axis(candidate_pose->pose_rotation);
+        Matrix pose_mat_rotation = candidate_pose.submatrix(0,2, 0,2);
+        Vector x_d = candidate_pose.subcol(0,3,3);
+        Vector o_d = dcm2axis(pose_mat_rotation);
         Vector x_d_hat, o_d_hat, q_d_hat;
+
+        //  store the context for the previous iKinCartesianController config
+        icart->storeContext(&context_backup);
+        //  set up the context for the computation of the candidates
+        setGraspContext();
 
         icart->askForPose(x_d, o_d, x_d_hat, o_d_hat, q_d_hat);
 
-        yDebug() << "Requested: " << candidate_pose->pose_transform.toString();
+        //  restore previous context
+        icart->restoreContext(context_backup);
+        icart->deleteContext(context_backup);
+
+        yDebug() << "Requested: " << candidate_pose.toString();
 
         //  calculate position cost function (first component of cost function)
-        candidate_pose->pose_cost_function(0) = norm(x_d - x_d_hat);
+        cost[0] = norm(x_d - x_d_hat);
 
         //  calculate orientation cost function
         Matrix tmp = axis2dcm(o_d_hat).submatrix(0,2, 0,2);
-        Matrix orientation_error_matrix =  candidate_pose->pose_rotation * tmp.transposed();
+        Matrix orientation_error_matrix =  pose_mat_rotation * tmp.transposed();
         Vector orientation_error_vector = dcm2axis(orientation_error_matrix);
 
-        candidate_pose->pose_cost_function(1) = norm(orientation_error_vector.subVector(0,2)) * fabs(sin(orientation_error_vector(3)));
+        Vector superq_XYZW_orientation = super_quadric_parameters.subVector(3,6);
+        Matrix superq_mat_orientation = axis2dcm(superq_XYZW_orientation).submatrix(0,2, 0,2);
+        Vector superq_axes_size = super_quadric_parameters.subVector(7,9);
 
+        Matrix pose_superq_mat_rotation = pose_mat_rotation.transposed() * superq_mat_orientation;
+        Vector pose_ax_size(3, 0.0);
+        for(int i=0 ; i<3 ; i++)
+        {
+            for(int j=0 ; j<3 ; j++)
+            {
+                double v = pose_superq_mat_rotation(i,j) * superq_axes_size[j];
+                pose_ax_size[i] += v*v;
+            }
+            pose_ax_size[i] = sqrt(pose_ax_size[i]);
+        }
 
-        candidate_pose->pose_cost_function(1) = 0.5*candidate_pose->pose_cost_function(1) + 0.5*(1-candidate_pose->pose_ax_size(1)/yarp::math::findMax(candidate_pose->pose_ax_size));
+        cost[1] = norm(orientation_error_vector.subVector(0,2)) * fabs(sin(orientation_error_vector(3)));
 
-        yDebug() << "Cost function: " << candidate_pose->pose_cost_function.toString();
+        cost[1] = 0.5*cost[1] + 0.5*(1-pose_ax_size[1]/yarp::math::findMax(pose_ax_size));
+
+        yDebug() << "Cost function: " << cost.toString();
 
     }
 
@@ -1084,7 +1117,7 @@ class GraspProcessorModule : public RFModule
     }
 
     /****************************************************************/
-    void computeGraspCandidates()
+    void computeGraspCandidates(const Vector &superq_parameters, vector<Matrix> &grasp_pose_candidates)
     {
         //  compute a series of viable grasp candidates according to superquadric parameters
         LockGuard lg(mutex);
@@ -1128,12 +1161,6 @@ class GraspProcessorModule : public RFModule
         }
         yInfo() << "Using table height =" << table_height_z;
 
-        //  store the context for the previous iKinCartesianController config
-        icart->storeContext(&context_backup);
-
-        //  set up the context for the computation of the candidates
-        setGraspContext();
-
         //  detach vtk actors corresponding to poses, if any are present
 //        for (auto &grasp_pose : pose_candidates)
 //        {
@@ -1152,31 +1179,27 @@ class GraspProcessorModule : public RFModule
             cap_actor->VisibilityOff();
         }
 
-        //  get superquadric parameters
-        Vector superq_parameters(10);
-        Vector superq_center = vtk_superquadric->getCenter();
-        superq_parameters.setSubvector(0, superq_center);
-        Vector superq_XYZW_orientation = vtk_superquadric->getOrientationXYZW();
-        superq_XYZW_orientation[3] *= (M_PI / 180.0);
-        superq_parameters.setSubvector(3, superq_XYZW_orientation);
-        Vector superq_axes_size = vtk_superquadric->getAxesSize();
-        superq_parameters.setSubvector(7, superq_axes_size);
-
         vector<Matrix> raw_grasp_pose_candidates;
         this->computeRawGraspPoseCandidates(superq_parameters, raw_grasp_pose_candidates);
 
-        vector<Matrix> refined_grasp_pose_candidates;
-        this->refineGraspPoseCandidates(superq_parameters, raw_grasp_pose_candidates, refined_grasp_pose_candidates);
+        this->refineGraspPoseCandidates(superq_parameters, raw_grasp_pose_candidates, grasp_pose_candidates);
+
+        Vector superq_XYZW_orientation = superq_parameters.subVector(3,6);
+        Vector superq_axes_size = superq_parameters.subVector(7,9);
 
         pose_candidates.clear();
-        for(size_t idx=0 ; idx<refined_grasp_pose_candidates.size() ; idx++)
+        for(size_t idx=0 ; idx<grasp_pose_candidates.size() ; idx++)
         {
-            if((refined_grasp_pose_candidates[idx].rows()!=4) || (refined_grasp_pose_candidates[idx].cols()!=4)) continue;
-
             shared_ptr<GraspPose> candidate_pose = shared_ptr<GraspPose>(new GraspPose);
 
-            candidate_pose->pose_translation = refined_grasp_pose_candidates[idx].subcol(0,3,3);
-            candidate_pose->pose_rotation = refined_grasp_pose_candidates[idx].submatrix(0,2,0,2);
+            if((grasp_pose_candidates[idx].rows()!=4) || (grasp_pose_candidates[idx].cols()!=4))
+            {
+                pose_candidates.push_back(candidate_pose);
+                continue;
+            }
+
+            candidate_pose->pose_translation = grasp_pose_candidates[idx].subcol(0,3,3);
+            candidate_pose->pose_rotation = grasp_pose_candidates[idx].submatrix(0,2,0,2);
 
             Matrix superq_mat_orientation = axis2dcm(superq_XYZW_orientation).submatrix(0,2, 0,2);
 
@@ -1204,34 +1227,14 @@ class GraspProcessorModule : public RFModule
             candidate_pose->pose_vtk_actor->SetUserTransform(candidate_pose->pose_vtk_transform);
             pose_actors[idx]->SetUserTransform(candidate_pose->pose_vtk_transform);
 
-            //  calculate the cost function for the pose
-            getPoseCostFunction(candidate_pose);
-
             //  fix graphical properties
 //                        candidate_pose->pose_vtk_actor->AxisLabelsOff();
 //                        candidate_pose->pose_vtk_actor->SetTotalLength(0.02, 0.02, 0.02);
-
-            stringstream ss;
-            ss << fixed << setprecision(3) << candidate_pose->pose_cost_function(0) << "_" << fixed << setprecision(3) << candidate_pose->pose_cost_function(1);
-            candidate_pose->setvtkActorCaption(ss.str());
 
             candidate_pose->pose_vtk_actor->ShallowCopy(pose_actors[idx]);
             pose_actors[idx]->AxisLabelsOff();
             pose_actors[idx]->SetTotalLength(0.02, 0.02, 0.02);
             pose_actors[idx]->VisibilityOn();
-
-            pose_captions[idx]->VisibilityOn();
-            pose_captions[idx]->GetTextActor()->SetTextScaleModeToNone();
-            pose_captions[idx]->SetCaption(candidate_pose->pose_vtk_caption_actor->GetCaption());
-            pose_captions[idx]->BorderOff();
-            pose_captions[idx]->LeaderOn();
-            pose_captions[idx]->GetCaptionTextProperty()->SetFontSize(15);
-            pose_captions[idx]->GetCaptionTextProperty()->FrameOff();
-            pose_captions[idx]->GetCaptionTextProperty()->ShadowOff();
-            pose_captions[idx]->GetCaptionTextProperty()->BoldOff();
-            pose_captions[idx]->GetCaptionTextProperty()->ItalicOff();
-            pose_captions[idx]->GetCaptionTextProperty()->SetColor(0.1, 0.1, 0.1);
-            pose_captions[idx]->SetAttachmentPoint(candidate_pose->pose_vtk_caption_actor->GetAttachmentPoint());
 
             //  add actor to renderer
             //vtk_renderer->AddActor(candidate_pose->pose_vtk_actor);
@@ -1239,74 +1242,68 @@ class GraspProcessorModule : public RFModule
             pose_candidates.push_back(candidate_pose);
         }
 
-        //  restore previous context
-        icart->restoreContext(context_backup);
-        icart->deleteContext(context_backup);
-
         return;
 
     }
 
     /****************************************************************/
-    bool getBestCandidatePose(shared_ptr<GraspPose> &best_candidate)
+    bool getBestCandidatePose(const Vector &super_quadric_parameters, const vector<Matrix> &grasp_pose_candidates, int &best_pose_index, vector<Vector> &costs)
     {
-        //  compute which is the best pose wrt cost function
-
-        if (pose_candidates.size())
+        if (super_quadric_parameters.size() < 0)
         {
-            //  sort poses based on < operator defined for GraspPose
-            //  from smallest to largest position error
-            sort(pose_candidates.begin(), pose_candidates.end());
-
-            //  select candidate with the best orientation precision
-            //  precision of less than 1 cm is not accepted
-            if (pose_candidates[0]->pose_cost_function(0) < 0.01)
-            {
-                best_candidate = pose_candidates[0];
-                double min_pose_cost_function_0 = best_candidate->pose_cost_function(0);
-                for (size_t idx = 1; (idx < pose_candidates.size()) && (pose_candidates[idx]->pose_cost_function(0) - min_pose_cost_function_0 < 0.002); idx++)
-                {
-                    if (pose_candidates[idx]->pose_cost_function(1) < best_candidate->pose_cost_function(1))
-                    {
-                        best_candidate = pose_candidates[idx];
-                    }
-                }
-            }
-            else
-            {
-                return false;
-            }
-
-            //  display the best candidate
-            LockGuard lg(mutex);
-            //best_candidate->pose_vtk_actor->SetTotalLength(0.06, 0.06, 0.06);
-            for (auto &caption : pose_captions)
-            {
-
-                if (caption->GetCaption() == NULL)
-                    continue;
-
-                string string2(best_candidate->pose_vtk_caption_actor->GetCaption());
-                string string1(caption->GetCaption());
-
-                if (string1 == string2)
-                {
-                    caption->GetCaptionTextProperty()->SetColor(0.0, 1.0, 0.0);
-                    caption->GetCaptionTextProperty()->BoldOn();
-                    break;
-                }
-            }
-            yInfo() << "Best candidate: cartesian " << best_candidate->pose_translation.toString()
-                    << " pose " << yarp::math::dcm2axis(best_candidate->pose_rotation).toString();
-            yInfo() << "Cost: " << best_candidate->pose_cost_function.toString();
-            yDebug()<< "candidate ax size: " << best_candidate->pose_ax_size.toString();
-            return true;
-        }
-        else
-        {
+            yError() << "getBestCandidatePose: invalid superquadric parameters vector dimensions";
             return false;
         }
 
+        // compute costs
+
+        costs.resize(grasp_pose_candidates.size(), Vector(2, std::numeric_limits<double>::max()));
+        for(int i=0 ; i<grasp_pose_candidates.size() ; i++)
+        {
+            if((grasp_pose_candidates[i].rows()==4) || (grasp_pose_candidates[i].cols()==4))
+            {
+                this->getPoseCostFunction(super_quadric_parameters, grasp_pose_candidates[i], costs[i]);
+            }
+        }
+
+        //  compute which is the best pose wrt cost function
+
+        double min_pose_cost_function_0 = std::numeric_limits<double>::max();
+        int min_pose_cost_function_0_index = 0;
+        for(int i=0 ; i<costs.size() ; i++)
+        {
+            if(costs[i][0] < min_pose_cost_function_0)
+            {
+                min_pose_cost_function_0 = costs[i][0];
+                min_pose_cost_function_0_index = i;
+            }
+        }
+
+        //  select candidate with the best orientation precision
+        //  precision of less than 1 cm is not accepted
+
+        if (min_pose_cost_function_0 > 0.01)
+        {
+            yError() << "getBestCandidatePose: no valid pose candidate";
+            return false;
+        }
+
+        double min_pose_cost_function_1 = costs[min_pose_cost_function_0_index][1];
+        int best_candidate_index = min_pose_cost_function_0_index;
+        for(int i=0 ; i<costs.size() ; i++)
+        {
+            if((costs[i][0] - min_pose_cost_function_0 < 0.002) && (costs[i][1] < min_pose_cost_function_1))
+            {
+                min_pose_cost_function_1 = costs[i][1];
+                best_candidate_index = i;
+            }
+        }
+
+        best_pose_index = best_candidate_index;
+
+        yInfo() << "getBestCandidatePose: best candidate cost: " << costs[best_candidate_index].toString();
+
+        return true;
     }
 
     /****************************************************************/
@@ -1368,11 +1365,61 @@ class GraspProcessorModule : public RFModule
 
         //  if anything goes wrong, the operation fails and the function
         //  returns a failure
-        computeGraspCandidates();
-        shared_ptr<GraspPose> best_pose;
-        if(getBestCandidatePose(best_pose))
+
+        //  get superquadric parameters
+        Vector superq_parameters(10);
+        Vector superq_center = vtk_superquadric->getCenter();
+        superq_parameters.setSubvector(0, superq_center);
+        Vector superq_XYZW_orientation = vtk_superquadric->getOrientationXYZW();
+        superq_XYZW_orientation[3] *= (M_PI / 180.0);
+        superq_parameters.setSubvector(3, superq_XYZW_orientation);
+        Vector superq_axes_size = vtk_superquadric->getAxesSize();
+        superq_parameters.setSubvector(7, superq_axes_size);
+
+        vector<Matrix> grasp_pose_candidates;
+        computeGraspCandidates(superq_parameters, grasp_pose_candidates);
+
+        int best_grasp_pose_index;
+        vector<Vector> costs;
+        if(getBestCandidatePose(superq_parameters, grasp_pose_candidates, best_grasp_pose_index, costs))
         {
-            success = fixReachingOffset(best_pose->getPose(), pose);
+            Vector best_pose(7, 0.0);
+            best_pose.setSubvector(0, grasp_pose_candidates[best_grasp_pose_index].subcol(0,3,3));
+            best_pose.setSubvector(3, yarp::math::dcm2axis(grasp_pose_candidates[best_grasp_pose_index].submatrix(0,2, 0,2)));
+
+            yInfo() << ": cartesian " << best_pose.subVector(0,2).toString()
+                    << " pose " << best_pose.subVector(3,6).toString();
+
+            for(size_t idx=0 ; (idx<pose_candidates.size() && idx<grasp_pose_candidates.size()) ; idx++)
+            {
+                if((grasp_pose_candidates[idx].rows()!=4) || (grasp_pose_candidates[idx].cols()!=4)) continue;
+
+                pose_candidates[idx]->pose_cost_function = costs[idx];
+                stringstream ss;
+                ss << fixed << setprecision(3) << pose_candidates[idx]->pose_cost_function(0) << "_" << fixed << setprecision(3) << pose_candidates[idx]->pose_cost_function(1);
+                pose_candidates[idx]->setvtkActorCaption(ss.str());
+
+                pose_captions[idx]->VisibilityOn();
+                pose_captions[idx]->GetTextActor()->SetTextScaleModeToNone();
+                pose_captions[idx]->SetCaption(pose_candidates[idx]->pose_vtk_caption_actor->GetCaption());
+                pose_captions[idx]->BorderOff();
+                pose_captions[idx]->LeaderOn();
+                pose_captions[idx]->GetCaptionTextProperty()->SetFontSize(15);
+                pose_captions[idx]->GetCaptionTextProperty()->FrameOff();
+                pose_captions[idx]->GetCaptionTextProperty()->ShadowOff();
+                pose_captions[idx]->GetCaptionTextProperty()->BoldOff();
+                pose_captions[idx]->GetCaptionTextProperty()->ItalicOff();
+                pose_captions[idx]->GetCaptionTextProperty()->SetColor(0.1, 0.1, 0.1);
+                pose_captions[idx]->SetAttachmentPoint(pose_candidates[idx]->pose_vtk_caption_actor->GetAttachmentPoint());
+
+                if(idx==best_grasp_pose_index)
+                {
+                    pose_captions[idx]->GetCaptionTextProperty()->SetColor(0.0, 1.0, 0.0);
+                    pose_captions[idx]->GetCaptionTextProperty()->BoldOn();
+                }
+            }
+
+            success = fixReachingOffset(best_pose, pose);
         }
 
         return success;
