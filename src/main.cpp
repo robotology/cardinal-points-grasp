@@ -731,6 +731,73 @@ class GraspProcessorModule : public RFModule
             }
         }
 
+        if (command.get(0).toString() == "select_best_grasp_pose")
+        {
+            // select the best grasp pose amoung a list of candidate in order to be optimize wit respect to the robot kinematics and object shape
+            // superquadric parameters (center_x center_y center_z rot_axis_x rot_axis_y rot_axis_z angle axis_size_1 axis_size_2 axis_size_3)
+            // list of pose candidates (t_x t_y t_z rot_axis_x rot_axis_y rot_axis_z angle)
+            // hand to use "right"/"left"
+
+            if (command.size() > 17)
+            {
+                Vector super_quadric_parameters(10);
+                for(int i=0 ; i<10 ; i++) super_quadric_parameters[i] = command.get(i+1).asDouble();
+
+                vector<Matrix> grasp_pose_candidates;
+                for(int i=11 ; i+6<command.size() ; i+=7)
+                {
+                    Vector orientation(4, 0.0);
+                    for(int j=0 ; j<4 ; j++) orientation[j] = command.get(i+3+j).asDouble();
+
+                    Matrix raw_grasp_pose_candidate = axis2dcm(orientation);
+
+                    for(int j=0 ; j<3 ; j++) raw_grasp_pose_candidate(j,3) = command.get(i+j).asDouble();
+
+                    grasp_pose_candidates.push_back(raw_grasp_pose_candidate);
+                }
+
+                if (command.size() > 10 + 7*grasp_pose_candidates.size() + 1)
+                {
+                    hand = command.get(10 + 7*grasp_pose_candidates.size() +1).asString();
+                    if (hand == "right")
+                    {
+                        grasping_hand = WhichHand::HAND_RIGHT;
+                    }
+                    else if (hand == "left")
+                    {
+                        grasping_hand = WhichHand::HAND_LEFT;
+                    }
+                    else
+                    {
+                        reply.addVocab(Vocab::encode("nack"));
+                        return true;
+                    }
+                }
+
+                int best_grasp_pose_index;
+                vector<Vector> costs;
+                if(this->getBestCandidatePose(super_quadric_parameters, grasp_pose_candidates, best_grasp_pose_index, costs))
+                {
+                    Vector best_pose(7, 0.0);
+                    best_pose.setSubvector(0, grasp_pose_candidates[best_grasp_pose_index].subcol(0,3,3));
+                    best_pose.setSubvector(3, yarp::math::dcm2axis(grasp_pose_candidates[best_grasp_pose_index].submatrix(0,2, 0,2)));
+
+                    reply.addString("ok");
+                    for(int j=0 ; j<best_pose.size() ; j++) reply.addDouble(best_pose[j]);
+                }
+                else
+                {
+                    reply.addString("nok");
+                }
+                return true;
+            }
+            else
+            {
+                reply.addVocab(Vocab::encode("nack"));
+                return true;
+            }
+        }
+
         reply.addVocab(Vocab::encode(cmd_success ? "ack":"nack"));
 
         return true;
