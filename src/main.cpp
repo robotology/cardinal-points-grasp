@@ -627,8 +627,27 @@ class GraspProcessorModule : public RFModule
         {
             // compute raw grasp poses candidates from superquadric parameters
             // superquadric parameters (center_x center_y center_z rot_axis_x rot_axis_y rot_axis_z angle axis_size_1 axis_size_2 axis_size_3)
+            // hand to use "right"/"left"
             if (command.size() > 10)
             {
+                if (command.size() > 11)
+                {
+                    hand = command.get(11).toString();
+                    if (hand == "right")
+                    {
+                        grasping_hand = WhichHand::HAND_RIGHT;
+                    }
+                    else if (hand == "left")
+                    {
+                        grasping_hand = WhichHand::HAND_LEFT;
+                    }
+                    else
+                    {
+                        reply.addVocab(Vocab::encode("nack"));
+                        return true;
+                    }
+                }
+
                 Vector super_quadric_parameters(10);
                 for(int i=0 ; i<10 ; i++) super_quadric_parameters[i] = command.get(i+1).asDouble();
 
@@ -655,6 +674,7 @@ class GraspProcessorModule : public RFModule
             // refine a grasp pose candidate to be compatible with the robot constraints
             // superquadric parameters (center_x center_y center_z rot_axis_x rot_axis_y rot_axis_z angle axis_size_1 axis_size_2 axis_size_3)
             // pose candidate (t_x t_y t_z rot_axis_x rot_axis_y rot_axis_z angle)
+            // hand to use "right"/"left"
             if (command.size() > 17)
             {
                 if (command.size() > 18)
@@ -937,14 +957,14 @@ class GraspProcessorModule : public RFModule
     }
 
     /****************************************************************/
-    void getPoseCostFunction(const Vector &super_quadric_parameters, const Matrix &candidate_pose, Vector &cost)
+    bool getPoseCostFunction(const Vector &super_quadric_parameters, const Matrix &candidate_pose, Vector &cost)
     {
         cost.resize(2, std::numeric_limits<double>::max());
 
         if(super_quadric_parameters.size() != 10)
         {
             yError() << "getPoseCostFunction: invalid superquadric parameters vector dimensions";
-            return;
+            return false ;
         }
 
         //  compute precision for movement
@@ -954,16 +974,36 @@ class GraspProcessorModule : public RFModule
         Vector o_d = dcm2axis(pose_mat_rotation);
         Vector x_d_hat, o_d_hat, q_d_hat;
 
+        if ((grasping_hand == WhichHand::HAND_LEFT) && left_arm_client.isValid())
+        {
+            left_arm_client.view(icart);
+        }
+        else if ((grasping_hand == WhichHand::HAND_RIGHT) && right_arm_client.isValid())
+        {
+            right_arm_client.view(icart);
+        }
+        else
+        {
+            yError() << "getPoseCostFunction: Invalid arm selected for kinematic!";
+            return false;
+        }
+
         //  store the context for the previous iKinCartesianController config
         icart->storeContext(&context_backup);
         //  set up the context for the computation of the candidates
         setGraspContext();
 
-        icart->askForPose(x_d, o_d, x_d_hat, o_d_hat, q_d_hat);
+        bool success = icart->askForPose(x_d, o_d, x_d_hat, o_d_hat, q_d_hat);
 
         //  restore previous context
         icart->restoreContext(context_backup);
         icart->deleteContext(context_backup);
+
+        if(!success)
+        {
+            yError() << "getPoseCostFunction: could not communicate with kinematics module";
+            return false;
+        }
 
         yDebug() << "Requested: " << candidate_pose.toString();
 
@@ -996,6 +1036,8 @@ class GraspProcessorModule : public RFModule
         cost[1] = 0.5*cost[1] + 0.5*(1-pose_ax_size[1]/yarp::math::findMax(pose_ax_size));
 
         yDebug() << "Cost function: " << cost.toString();
+
+        return true;
 
     }
 
@@ -1121,20 +1163,6 @@ class GraspProcessorModule : public RFModule
     {
         //  compute a series of viable grasp candidates according to superquadric parameters
         LockGuard lg(mutex);
-
-        if ((grasping_hand == WhichHand::HAND_LEFT) && left_arm_client.isValid())
-        {
-            left_arm_client.view(icart);
-        }
-        else if ((grasping_hand == WhichHand::HAND_RIGHT) && right_arm_client.isValid())
-        {
-            right_arm_client.view(icart);
-        }
-        else
-        {
-            yError() << "Invalid arm!";
-            return;
-        }
 
         //  retrieve table height
         //  otherwise, leave default value
@@ -1262,7 +1290,11 @@ class GraspProcessorModule : public RFModule
         {
             if((grasp_pose_candidates[i].rows()==4) || (grasp_pose_candidates[i].cols()==4))
             {
-                this->getPoseCostFunction(super_quadric_parameters, grasp_pose_candidates[i], costs[i]);
+                if(!(this->getPoseCostFunction(super_quadric_parameters, grasp_pose_candidates[i], costs[i])))
+                {
+                    yError() << "getBestCandidatePose: could not compute grasping pose cost function";
+                    return false;
+                }
             }
         }
 
