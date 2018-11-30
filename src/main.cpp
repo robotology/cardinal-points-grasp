@@ -906,6 +906,12 @@ class GraspProcessorModule : public RFModule
         //  if fixate_object is given, look at the object before acquiring the point cloud
         if (fixate_object)
         {
+            if(action_render_rpc.getOutputCount()<1)
+            {
+                yError() << "requestRefreshPointCloud: no connection to action rendering module";
+                return false;
+            }
+
             cmd_request.addString("look");
             cmd_request.addString(object);
             cmd_request.addString("wait");
@@ -924,6 +930,12 @@ class GraspProcessorModule : public RFModule
 
         cmd_request.addString("get_point_cloud");
         cmd_request.addString(object);
+
+        if(point_cloud_rpc.getOutputCount()<1)
+        {
+            yError() << "requestRefreshPointCloud: no connection to point cloud module";
+            return false;
+        }
 
         point_cloud_rpc.write(cmd_request, cmd_reply);
 
@@ -954,6 +966,12 @@ class GraspProcessorModule : public RFModule
         //  refresh superquadric with parameters
         Bottle sq_reply;
         sq_reply.clear();
+
+        if(superq_rpc.getOutputCount()<1)
+        {
+            yError() << "requestRefreshSuperquadric: no connection to superquadric module";
+            return false;
+        }
 
         superq_rpc.write(point_cloud, sq_reply);
 
