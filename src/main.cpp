@@ -124,16 +124,12 @@ class GraspProcessorModule : public RFModule
 
     bool closing;
 
-    string hand;
     string robot;
     WhichHand grasping_hand;
 
     //  client for cartesian interface
     PolyDriver left_arm_client, right_arm_client;
     ICartesianControl *icart;
-
-    //  backup context
-    int context_backup;
 
     //  visualization objects
     unique_ptr<Points> vtk_points;
@@ -1074,6 +1070,7 @@ class GraspProcessorModule : public RFModule
         }
 
         //  store the context for the previous iKinCartesianController config
+        int context_backup;
         icart->storeContext(&context_backup);
         //  set up the context for the computation of the candidates
         setGraspContext();
@@ -1188,11 +1185,6 @@ class GraspProcessorModule : public RFModule
 
         refined_grasp_pose_candidates.clear();
 
-        // correct table height
-        Vector table_height_corr = super_quadric_parameters.subVector(0,2);
-        table_height_corr[2] = table_height_z;
-        fixReachingOffset(table_height_corr,table_height_corr,true);
-
         for(size_t idx=0 ; idx<raw_grasp_pose_candidates.size() ; idx++)
         {
             Matrix pose_candidate = raw_grasp_pose_candidates[idx];
@@ -1220,18 +1212,18 @@ class GraspProcessorModule : public RFModule
                 }
 
                 //  if the grasp is close to the table surface, we need to adjust the pose to avoid collision
-                bool side_low = is_side_grasp && ((pose_candidate(2,3) - 0.4 * palm_width) < table_height_corr[2]);
-                bool top_low = !is_side_grasp && ((pose_candidate(2,3) - 0.9 * finger_length) < table_height_corr[2]);
+                bool side_low = is_side_grasp && ((pose_candidate(2,3) - 0.4 * palm_width) < table_height_z);
+                bool top_low = !is_side_grasp && ((pose_candidate(2,3) - 0.9 * finger_length) < table_height_z);
 
                 if (side_low)
                 {
                     //  lift up the grasp closer to the upper end of the superquadric
-                    pose_candidate(2,3) = table_height_corr[2] + 0.4 * palm_width;
+                    pose_candidate(2,3) = table_height_z + 0.4 * palm_width;
                 }
                 if (top_low)
                 {
                     //  grab the object with the grasp center on top of the superquadric center
-                    pose_candidate(2,3) = table_height_corr[2] + 0.8 * finger_length;
+                    pose_candidate(2,3) = table_height_z + 0.8 * finger_length;
                 }
 
                 refined_grasp_pose_candidates.push_back(pose_candidate);
@@ -1594,6 +1586,7 @@ class GraspProcessorModule : public RFModule
         else
         {
             //  simulation context, suppose there is no actionsRenderingEngine running
+            int context_backup;
             icart->storeContext(&context_backup);
             setGraspContext();
             Vector previous_x(3), previous_o(4);
