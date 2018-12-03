@@ -152,7 +152,9 @@ class GraspProcessorModule : public RFModule
     vector<vtkSmartPointer<vtkCaptionActor2D>> pose_captions;
 
     //  filtering constants
-    double table_height_z;
+    Vector planar_obstacle; // plane to avoid, typically a table (format (a b c d) following plane equation a.x+b.y+c.z+d=0)
+    Vector grasper_bounding_box; // bounding box of the grasper (x_min x_max y_min _y_max z_min z_max) expressed in the robot grasper frame used by the controller
+    double obstacle_safety_distance; // minimal distance to respect between the grasper and the obstacle
     double palm_width;
     double finger_length;
     Matrix grasper_specific_transform_right;
@@ -185,7 +187,7 @@ class GraspProcessorModule : public RFModule
             }
             else
             {
-                yError()<<"Invalid grasp_trsfm_right format in config";
+                yError()<<"Invalid grasp_trsfm_right dimension in config. Should be 7.";
                 valid_grasp_specific_transform = false;
             }
         }
@@ -193,7 +195,7 @@ class GraspProcessorModule : public RFModule
 
         if( (!valid_grasp_specific_transform) && ((robot == "icubSim") || (robot == "icub")) )
         {
-            yInfo()<<"Loading grasp_trsfm_right default value for Icub";
+            yInfo() << "Loading grasp_trsfm_right default value for iCub";
             grasp_specific_translation[0] = -0.01;
             grasp_specific_orientation[1] = 1;
             grasp_specific_orientation[3] = - 38.0 * M_PI/180.0;
@@ -201,7 +203,7 @@ class GraspProcessorModule : public RFModule
 
         grasper_specific_transform_right = axis2dcm(grasp_specific_orientation);
         grasper_specific_transform_right.setSubcol(grasp_specific_translation, 0,3);
-        yInfo()<<"Grabber specific transform for right arm loaded\n"<<grasper_specific_transform_right.toString();
+        yInfo() << "Grabber specific transform for right arm loaded\n" << grasper_specific_transform_right.toString();
 
         grasp_specific_translation.zero();
         grasp_specific_orientation.zero();
@@ -217,7 +219,7 @@ class GraspProcessorModule : public RFModule
             }
             else
             {
-                yError()<<"Invalid grasp_trsfm_left format in config";
+                yError() << "Invalid grasp_trsfm_left dimension in config. Should be 7.";
                 valid_grasp_specific_transform = false;
             }
         }
@@ -225,7 +227,7 @@ class GraspProcessorModule : public RFModule
 
         if( (!valid_grasp_specific_transform) && ((robot == "icubSim") || (robot == "icub")) )
         {
-            yInfo()<<"Loading grasp_trsfm_left default value for Icub";
+            yInfo() << "Loading grasp_trsfm_left default value for iCub";
             grasp_specific_translation[0] = -0.01;
             grasp_specific_orientation[1] = 1;
             grasp_specific_orientation[3] = + 38.0 * M_PI/180.0;
@@ -233,7 +235,43 @@ class GraspProcessorModule : public RFModule
 
         grasper_specific_transform_left = axis2dcm(grasp_specific_orientation);
         grasper_specific_transform_left.setSubcol(grasp_specific_translation, 0,3);
-        yInfo()<<"Grabber specific transform for left arm loaded\n"<<grasper_specific_transform_left.toString();
+        yInfo() << "Grabber specific transform for left arm loaded\n" << grasper_specific_transform_left.toString();
+
+        list = rf.find("grasp_bounding_box").asList();
+        if(list)
+        {
+            if(list->size() == 6)
+            {
+                for(int i=0 ; i<6 ; i++) grasper_bounding_box[i] = list->get(i).asDouble();
+            }
+            else
+            {
+                yError() << "Invalid grasp_bounding_box dimension in config. Should be 6.";
+            }
+        }
+        yInfo() << "Grabber bounding box loaded\n" << grasper_bounding_box.toString();
+
+        list = rf.find("planar_obstacle").asList();
+        if(list)
+        {
+            if(list->size() == 4)
+            {
+                for(int i=0 ; i<4 ; i++) planar_obstacle[i] = list->get(i).asDouble();
+            }
+            else
+            {
+                planar_obstacle[0] = 0.0;
+                planar_obstacle[1] = 0.0;
+                planar_obstacle[2] = 1;
+                planar_obstacle[3] = -(-0.15);
+                yError() << "Invalid planar_obstacle dimension in config. Should be 4.";
+            }
+        }
+        yInfo() << "Planar obstacle loaded\n" << planar_obstacle.toString();
+
+
+        obstacle_safety_distance = rf.check("obstacle_safety_distance", Value(0.0)).asDouble();
+        yInfo() << "Obstacle safety distance loaded=" << obstacle_safety_distance;
 
         Property optionLeftArm, optionRightArm;
 
@@ -1190,17 +1228,7 @@ class GraspProcessorModule : public RFModule
             Matrix pose_candidate = raw_grasp_pose_candidates[idx];
             if (isCandidateGraspFeasible(super_quadric_parameters, pose_candidate))
             {
-                //  we can either have side or top grasps.
-                //  it is helpful to have a variable to discriminate the grasp
-                Vector gy = pose_candidate.subcol(0,1,3);
-                Vector z_root(3, 0.0);
-                z_root(2) = 1.0;
-                bool is_side_grasp = (dot(-1*z_root, gy) > 0.9);
-
-                //  translate the pose along gz and gx according to the palm size
-                //  rotate the pose around the hand y axis
-                //  sign of operations depends upon the hand we are using
-                //  the placement of the hand wrt the superquadric center depends on the size along gx
+                // apply robot specific transform
 
                 if(grasping_hand == WhichHand::HAND_RIGHT)
                 {
@@ -1211,19 +1239,38 @@ class GraspProcessorModule : public RFModule
                     pose_candidate = pose_candidate * grasper_specific_transform_left;
                 }
 
-                //  if the grasp is close to the table surface, we need to adjust the pose to avoid collision
-                bool side_low = is_side_grasp && ((pose_candidate(2,3) - 0.4 * palm_width) < table_height_z);
-                bool top_low = !is_side_grasp && ((pose_candidate(2,3) - 0.9 * finger_length) < table_height_z);
+                // check collision with plane
 
-                if (side_low)
+                double min_distance_to_plane = 0.0;
+
+                for(int i=0 ; i<2 ; i++)
                 {
-                    //  lift up the grasp closer to the upper end of the superquadric
-                    pose_candidate(2,3) = table_height_z + 0.4 * palm_width;
+                    Vector corner(4, 1.0);
+                    corner[0] = grasper_bounding_box[i];
+                    for(int j=0 ; j<2 ; j++)
+                    {
+                        corner[1] = grasper_bounding_box[2+j];
+                        for(int k=0 ; k<2 ; k++)
+                        {
+                            corner[2] = grasper_bounding_box[4+k];
+                            Vector corner_world = pose_candidate * corner;
+
+                            double distance = dot(corner_world, planar_obstacle);
+                            if(distance < min_distance_to_plane)
+                            {
+                                min_distance_to_plane = distance;
+                            }
+                        }
+                    }
                 }
-                if (top_low)
+
+                //  if the grasp is close to the surface, we need to adjust the pose to avoid collision
+                if(min_distance_to_plane < 0.0)
                 {
-                    //  grab the object with the grasp center on top of the superquadric center
-                    pose_candidate(2,3) = table_height_z + 0.8 * finger_length;
+                    for(int i=0 ; i<3 ; i++)
+                    {
+                        pose_candidate(i,3) += (-min_distance_to_plane+obstacle_safety_distance) * planar_obstacle[i];
+                    }
                 }
 
                 refined_grasp_pose_candidates.push_back(pose_candidate);
@@ -1255,7 +1302,11 @@ class GraspProcessorModule : public RFModule
             {
                 if (payload->size() >= 2)
                 {
-                    table_height_z = payload->get(1).asDouble();
+                    planar_obstacle[0] = 0.0;
+                    planar_obstacle[1] = 0.0;
+                    planar_obstacle[2] = 1.0;
+
+                    planar_obstacle[3] = - payload->get(1).asDouble();
                     table_ok = true;
                 }
             }
@@ -1264,7 +1315,7 @@ class GraspProcessorModule : public RFModule
         {
             yWarning() << "Unable to retrieve table height, using default.";
         }
-        yInfo() << "Using table height =" << table_height_z;
+        yInfo() << "Using table height =" << -planar_obstacle[3];
 
         //  detach vtk actors corresponding to poses, if any are present
 //        for (auto &grasp_pose : pose_candidates)
@@ -1603,9 +1654,13 @@ class GraspProcessorModule : public RFModule
 
 
 public:
-    GraspProcessorModule(): closing(false), table_height_z(-0.15), palm_width(0.08),
-        finger_length(0.08), grasping_hand(WhichHand::HAND_RIGHT), grasper_specific_transform_right(eye(4,4)),
-        grasper_specific_transform_left(eye(4,4)){}
+    GraspProcessorModule(): closing(false), planar_obstacle(4, 0.0), grasper_bounding_box(6, 0.0), obstacle_safety_distance(0.005),
+        palm_width(0.08), finger_length(0.08), grasping_hand(WhichHand::HAND_RIGHT), grasper_specific_transform_right(eye(4,4)),
+        grasper_specific_transform_left(eye(4,4))
+    {
+        planar_obstacle[2] = 1;
+        planar_obstacle[3] = -(-0.15);
+    }
 
 };
 
