@@ -261,7 +261,7 @@ class GraspProcessorModule : public RFModule
                 yError()<<"Invalid approach_right dimension in config. Should be 4.";
             }
         }
-        else if(robot == "icub" || robot == "icubSim")
+        else if((robot == "icubSim") || (robot == "icub"))
         {
             grasper_approach_parameters_right[0] = -0.05;
             grasper_approach_parameters_right[1] = 0.0;
@@ -282,7 +282,7 @@ class GraspProcessorModule : public RFModule
                 yError()<<"Invalid approach_left dimension in config. Should be 4.";
             }
         }
-        else if(robot == "icub" || robot == "icubSim")
+        else if((robot == "icubSim") || (robot == "icub"))
         {
             grasper_approach_parameters_left[0] = -0.05;
             grasper_approach_parameters_left[1] = 0.0;
@@ -337,7 +337,7 @@ class GraspProcessorModule : public RFModule
 
         //  open clients when using iCub
 
-        if(robot == "icub" || robot == "icubSim")
+        if((robot == "icubSim") || (robot == "icub"))
         {
             Property optionLeftArm, optionRightArm;
 
@@ -1153,7 +1153,7 @@ class GraspProcessorModule : public RFModule
         Vector o_d = dcm2axis(pose_mat_rotation);
         Vector x_d_hat, o_d_hat, q_d_hat;
 
-        if(robot == "icub" || robot == "icubsim")
+        if((robot == "icubSim") || (robot == "icub"))
         {
             if ((grasping_hand == WhichHand::HAND_LEFT) && left_arm_client.isValid())
             {
@@ -1719,7 +1719,7 @@ class GraspProcessorModule : public RFModule
     /****************************************************************/
     bool executeGrasp(Vector &pose)
     {
-        if(robot == "icubsim")
+        if(robot == "icubSim")
         {
             //  simulation context, suppose there is no actionsRenderingEngine running
             int context_backup;
