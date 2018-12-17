@@ -691,9 +691,9 @@ class GraspProcessorModule : public RFModule
             if (action_render_rpc.getOutputCount() > 0)
             {
                 Bottle cmd, reply;
-                cmd.addString("drop");
+                cmd.addVocab(Vocab::encode("drop"));
                 action_render_rpc.write(cmd, reply);
-                cmd_success = (reply.toString() == "[ack]") ? true:false;
+                cmd_success = (reply.get(0).asVocab() == Vocab::encode("ack"));
             }
             else
             {
@@ -707,9 +707,9 @@ class GraspProcessorModule : public RFModule
             if (action_render_rpc.getOutputCount() > 0)
             {
                 Bottle cmd, reply;
-                cmd.addString("home");
+                cmd.addVocab(Vocab::encode("home"));
                 action_render_rpc.write(cmd, reply);
-                cmd_success = (reply.toString() == "[ack]") ? true:false;
+                cmd_success = (reply.get(0).asVocab() == Vocab::encode("ack"));
             }
             else
             {
@@ -807,14 +807,14 @@ class GraspProcessorModule : public RFModule
 
                 if((refined_grasp_pose_candidates.front().cols()==4) && (refined_grasp_pose_candidates.front().rows()==4))
                 {
-                    reply.addString("ok");
+                    reply.addVocab(Vocab::encode("ok"));
                     for(int i=0 ; i<3 ; i++) reply.addDouble(refined_grasp_pose_candidates.front()(i,3));
                     Vector orientation = dcm2axis(refined_grasp_pose_candidates.front());
                     for(int i=0 ; i<4 ; i++) reply.addDouble(orientation[i]);
                 }
                 else
                 {
-                    reply.addString("nok");
+                    reply.addVocab(Vocab::encode("nok"));
                 }
                 return true;
             }
@@ -876,12 +876,12 @@ class GraspProcessorModule : public RFModule
                     best_pose.setSubvector(0, grasp_pose_candidates[best_grasp_pose_index].subcol(0,3,3));
                     best_pose.setSubvector(3, yarp::math::dcm2axis(grasp_pose_candidates[best_grasp_pose_index].submatrix(0,2, 0,2)));
 
-                    reply.addString("ok");
+                    reply.addVocab(Vocab::encode("ok"));
                     for(int j=0 ; j<best_pose.size() ; j++) reply.addDouble(best_pose[j]);
                 }
                 else
                 {
-                    reply.addString("nok");
+                    reply.addVocab(Vocab::encode("nok"));
                 }
                 return true;
             }
@@ -1006,12 +1006,12 @@ class GraspProcessorModule : public RFModule
                 return false;
             }
 
-            cmd_request.addString("look");
+            cmd_request.addVocab(Vocab::encode("look"));
             cmd_request.addString(object);
             cmd_request.addString("wait");
 
             action_render_rpc.write(cmd_request, cmd_reply);
-            if (cmd_reply.toString() != "[ack]")
+            if (cmd_reply.get(0).asVocab() != Vocab::encode("ack"))
             {
                 yError() << "Didn't manage to look at the object";
                 return false;
@@ -1197,7 +1197,7 @@ class GraspProcessorModule : public RFModule
             }
 
             Bottle cmd, reply;
-            cmd.addString("ask");
+            cmd.addVocab(Vocab::encode("ask"));
             Bottle &subcmd = cmd.addList();
             for(int i=0 ; i<3 ; i++) subcmd.addDouble(x_d[i]);
             for(int i=0 ; i<4 ; i++) subcmd.addDouble(o_d[i]);
@@ -1217,7 +1217,7 @@ class GraspProcessorModule : public RFModule
                 return false;
             }
 
-            if(reply.get(0).asString() != "ack")
+            if(reply.get(0).asVocab() != Vocab::encode("ack"))
             {
                 yError() << "getPoseCostFunction: invalid reply from action rendering module:" << reply.toString();
                 return false;
@@ -1425,7 +1425,7 @@ class GraspProcessorModule : public RFModule
         if (robot != "icubSim" && table_calib_rpc.getOutputCount() > 0)
         {
             Bottle table_cmd, table_rply;
-            table_cmd.addString("get");
+            table_cmd.addVocab(Vocab::encode("get"));
             table_cmd.addString("table");
 
             table_calib_rpc.write(table_cmd, table_rply);
@@ -1625,7 +1625,7 @@ class GraspProcessorModule : public RFModule
             reach_calib_rpc.write(command, reply);
 
             //  incoming reply is going to be (success x y z)
-            if (reply.get(0).asString() == "ok")
+            if (reply.get(0).asVocab() == Vocab::encode("ok"))
             {
                 poseFixed = poseToFix;
                 poseFixed(0) = reply.get(1).asDouble();
