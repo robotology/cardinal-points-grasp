@@ -151,7 +151,7 @@ class GraspProcessorModule : public RFModule
     vector<vtkSmartPointer<vtkAxesActor>> pose_actors;
     vector<vtkSmartPointer<vtkCaptionActor2D>> pose_captions;
 
-    //  filtering constants
+    //  Robot specific parameters
     Vector planar_obstacle; // plane to avoid, typically a table (format (a b c d) following plane equation a.x+b.y+c.z+d=0)
     Vector grasper_bounding_box; // bounding box of the grasper (x_min x_max y_min _y_max z_min z_max) expressed in the robot grasper frame used by the controller
     double obstacle_safety_distance; // minimal distance to respect between the grasper and the obstacle
@@ -159,6 +159,8 @@ class GraspProcessorModule : public RFModule
     double finger_length;
     Matrix grasper_specific_transform_right;
     Matrix grasper_specific_transform_left;
+    Vector grasper_approach_parameters_right;
+    Vector grasper_approach_parameters_left;
 
     //  visualization parameters
     int x, y, h, w;
@@ -246,6 +248,34 @@ class GraspProcessorModule : public RFModule
         grasper_specific_transform_left = axis2dcm(grasp_specific_orientation);
         grasper_specific_transform_left.setSubcol(grasp_specific_translation, 0,3);
         yInfo() << "Grabber specific transform for left arm loaded\n" << grasper_specific_transform_left.toString();
+
+        list = rf.find("approach_right").asList();
+        if(list)
+        {
+            if(list->size() == 4)
+            {
+                for(int i=0 ; i<4 ; i++) grasper_approach_parameters_right[i] = list->get(i).asDouble();
+            }
+            else
+            {
+                yError()<<"Invalid approach_right dimension in config. Should be 4.";
+            }
+        }
+        yInfo() << "Grabber specific approach for right arm loaded\n" << grasper_approach_parameters_right.toString();
+
+        list = rf.find("approach_left").asList();
+        if(list)
+        {
+            if(list->size() == 4)
+            {
+                for(int i=0 ; i<4 ; i++) grasper_approach_parameters_left[i] = list->get(i).asDouble();
+            }
+            else
+            {
+                yError()<<"Invalid approach_left dimension in config. Should be 4.";
+            }
+        }
+        yInfo() << "Grabber specific approach for left arm loaded\n" << grasper_approach_parameters_left.toString();
 
         list = rf.find("grasp_bounding_box").asList();
         if(list)
@@ -1712,19 +1742,16 @@ class GraspProcessorModule : public RFModule
             Bottle &ptr1 = command.addList();
             ptr1.addString("approach");
             Bottle &ptr2 = ptr1.addList();
-            ptr2.addDouble(-0.05);
-            ptr2.addDouble(0.0);
             if (grasping_hand == WhichHand::HAND_LEFT)
             {
-                ptr2.addDouble(0.05);
+                for(int i=0 ; i<4 ; i++) ptr2.addDouble(grasper_approach_parameters_left[i]);
                 command.addString("left");
             }
             else
             {
-                ptr2.addDouble(-0.05);
+                for(int i=0 ; i<4 ; i++) ptr2.addDouble(grasper_approach_parameters_right[i]);
                 command.addString("right");
             }
-            ptr2.addDouble(0.0);
 
             yInfo() << command.toString();
             action_render_rpc.write(command, reply);
@@ -1744,7 +1771,7 @@ class GraspProcessorModule : public RFModule
 public:
     GraspProcessorModule(): closing(false), planar_obstacle(4, 0.0), grasper_bounding_box(6, 0.0), obstacle_safety_distance(0.005),
         palm_width(0.08), finger_length(0.08), grasping_hand(WhichHand::HAND_RIGHT), grasper_specific_transform_right(eye(4,4)),
-        grasper_specific_transform_left(eye(4,4))
+        grasper_specific_transform_left(eye(4,4)), grasper_approach_parameters_right(4, 0.0), grasper_approach_parameters_left(4, 0.0)
     {
         planar_obstacle[2] = 1;
         planar_obstacle[3] = -(-0.15);
