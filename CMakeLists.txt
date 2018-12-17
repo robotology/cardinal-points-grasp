@@ -45,3 +45,6 @@ icubcontrib_add_uninstall_target()
 
 file(GLOB scripts ${CMAKE_SOURCE_DIR}/app/scripts/*.template)
 yarp_install(FILES ${scripts} DESTINATION ${ICUBCONTRIB_APPLICATIONS_TEMPLATES_INSTALL_DIR})
+
+file(GLOB ini app/conf/*.ini)
+yarp_install(FILES ${ini} DESTINATION ${ICUBCONTRIB_CONTEXTS_INSTALL_DIR}/${PROJECT_NAME})

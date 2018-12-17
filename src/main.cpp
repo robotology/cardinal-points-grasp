@@ -1797,6 +1797,8 @@ int main(int argc, char *argv[])
 {
     Network yarp;
     ResourceFinder rf;
+    rf.setDefaultContext("grasp-processor");
+    rf.setDefaultConfigFile("config-icub.ini");
     rf.configure(argc, argv);
 
     if (!yarp.checkNetwork())
