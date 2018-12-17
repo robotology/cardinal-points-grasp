@@ -261,6 +261,13 @@ class GraspProcessorModule : public RFModule
                 yError()<<"Invalid approach_right dimension in config. Should be 4.";
             }
         }
+        else if(robot == "icub" || robot == "icubSim")
+        {
+            grasper_approach_parameters_right[0] = -0.05;
+            grasper_approach_parameters_right[1] = 0.0;
+            grasper_approach_parameters_right[2] = -0.05;
+            grasper_approach_parameters_right[3] = 0.0;
+        }
         yInfo() << "Grabber specific approach for right arm loaded\n" << grasper_approach_parameters_right.toString();
 
         list = rf.find("approach_left").asList();
@@ -274,6 +281,13 @@ class GraspProcessorModule : public RFModule
             {
                 yError()<<"Invalid approach_left dimension in config. Should be 4.";
             }
+        }
+        else if(robot == "icub" || robot == "icubSim")
+        {
+            grasper_approach_parameters_left[0] = -0.05;
+            grasper_approach_parameters_left[1] = 0.0;
+            grasper_approach_parameters_left[2] = +0.05;
+            grasper_approach_parameters_left[3] = 0.0;
         }
         yInfo() << "Grabber specific approach for left arm loaded\n" << grasper_approach_parameters_left.toString();
 
