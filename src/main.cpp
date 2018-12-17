@@ -117,7 +117,7 @@ class GraspProcessorModule : public RFModule
 
     RpcClient superq_rpc;
     RpcClient point_cloud_rpc;
-    RpcClient action_render_rpc;    //not used atm
+    RpcClient action_render_rpc;
     RpcClient reach_calib_rpc;
     RpcClient table_calib_rpc;
     RpcServer module_rpc;   //will be replaced by idl services
@@ -127,7 +127,7 @@ class GraspProcessorModule : public RFModule
     string robot;
     WhichHand grasping_hand;
 
-    //  client for cartesian interface
+    //  client for cartesian interface (for use with the iCub)
     PolyDriver left_arm_client, right_arm_client;
     ICartesianControl *icart;
 
@@ -166,7 +166,17 @@ class GraspProcessorModule : public RFModule
     bool configure(ResourceFinder &rf) override
     {
         moduleName = rf.check("name", Value("graspProcessor")).toString();
-        robot = (rf.check("sim")? "icubSim" : "icub");
+        if(!rf.check("robot"))
+        {
+            robot = (rf.check("sim")? "icubSim" : "icub");
+        }
+        else
+        {
+            robot = rf.find("robot").asString();
+        }
+
+        yInfo() << "Opening module for connection with robot" << robot;
+
         string control_arms = rf.check("control-arms", Value("both")).toString();
         x = rf.check("x", Value(0)).asInt();
         y = rf.check("y", Value(0)).asInt();
@@ -273,16 +283,6 @@ class GraspProcessorModule : public RFModule
         obstacle_safety_distance = rf.check("obstacle_safety_distance", Value(0.0)).asDouble();
         yInfo() << "Obstacle safety distance loaded=" << obstacle_safety_distance;
 
-        Property optionLeftArm, optionRightArm;
-
-        optionLeftArm.put("device", "cartesiancontrollerclient");
-        optionLeftArm.put("remote", "/" + robot + "/cartesianController/left_arm");
-        optionLeftArm.put("local", "/" + moduleName + "/cartesianClient/left_arm");
-
-        optionRightArm.put("device", "cartesiancontrollerclient");
-        optionRightArm.put("remote", "/" + robot + "/cartesianController/right_arm");
-        optionRightArm.put("local", "/" + moduleName + "/cartesianClient/right_arm");
-
         //  open the necessary ports
         superq_rpc.open("/" + moduleName + "/superquadricRetrieve:rpc");
         point_cloud_rpc.open("/" + moduleName + "/pointCloud:rpc");
@@ -291,23 +291,39 @@ class GraspProcessorModule : public RFModule
         table_calib_rpc.open("/" + moduleName + "/tableCalib:rpc");
         module_rpc.open("/" + moduleName + "/cmd:rpc");
 
-        //  open clients
-        if ((control_arms=="both") || (control_arms=="left"))
+        //  open clients when using iCub
+
+        if(robot == "icub" || robot == "icubSim")
         {
-            if (!left_arm_client.open(optionLeftArm))
+            Property optionLeftArm, optionRightArm;
+
+            optionLeftArm.put("device", "cartesiancontrollerclient");
+            optionLeftArm.put("remote", "/" + robot + "/cartesianController/left_arm");
+            optionLeftArm.put("local", "/" + moduleName + "/cartesianClient/left_arm");
+
+            optionRightArm.put("device", "cartesiancontrollerclient");
+            optionRightArm.put("remote", "/" + robot + "/cartesianController/right_arm");
+            optionRightArm.put("local", "/" + moduleName + "/cartesianClient/right_arm");
+
+            if ((control_arms=="both") || (control_arms=="left"))
             {
-                return false;
-            }
-        }
-        if ((control_arms=="both") || (control_arms=="right"))
-        {
-            if (!right_arm_client.open(optionRightArm))
-            {
-                if (left_arm_client.isValid())
+                if (!left_arm_client.open(optionLeftArm))
                 {
-                    left_arm_client.close();
+                    yError() << "Could not open cartesian solver client for left arm";
+                    return false;
                 }
-                return false;
+            }
+            if ((control_arms=="both") || (control_arms=="right"))
+            {
+                if (!right_arm_client.open(optionRightArm))
+                {
+                    if (left_arm_client.isValid())
+                    {
+                        left_arm_client.close();
+                    }
+                    yError() << "Could not open cartesian solver client for right arm";
+                    return false;
+                }
             }
         }
 
@@ -1093,36 +1109,103 @@ class GraspProcessorModule : public RFModule
         Vector o_d = dcm2axis(pose_mat_rotation);
         Vector x_d_hat, o_d_hat, q_d_hat;
 
-        if ((grasping_hand == WhichHand::HAND_LEFT) && left_arm_client.isValid())
+        if(robot == "icub" || robot == "icubsim")
         {
-            left_arm_client.view(icart);
-        }
-        else if ((grasping_hand == WhichHand::HAND_RIGHT) && right_arm_client.isValid())
-        {
-            right_arm_client.view(icart);
+            if ((grasping_hand == WhichHand::HAND_LEFT) && left_arm_client.isValid())
+            {
+                left_arm_client.view(icart);
+            }
+            else if ((grasping_hand == WhichHand::HAND_RIGHT) && right_arm_client.isValid())
+            {
+                right_arm_client.view(icart);
+            }
+            else
+            {
+                yError() << "getPoseCostFunction: Invalid arm selected for kinematic!";
+                return false;
+            }
+
+            //  store the context for the previous iKinCartesianController config
+            int context_backup;
+            icart->storeContext(&context_backup);
+
+            //  set up the context for the computation of the candidates
+            this->setGraspContext();
+
+            bool success = icart->askForPose(x_d, o_d, x_d_hat, o_d_hat, q_d_hat);
+
+            //  restore previous context
+            icart->restoreContext(context_backup);
+            icart->deleteContext(context_backup);
+
+            if(!success)
+            {
+                yError() << "getPoseCostFunction: could not communicate with kinematics module";
+                return false;
+            }
         }
         else
         {
-            yError() << "getPoseCostFunction: Invalid arm selected for kinematic!";
-            return false;
-        }
+            if(action_render_rpc.getOutputCount()<1)
+            {
+                yError() << "getPoseCostFunction: no connection to action rendering module";
+                return false;
+            }
 
-        //  store the context for the previous iKinCartesianController config
-        int context_backup;
-        icart->storeContext(&context_backup);
-        //  set up the context for the computation of the candidates
-        setGraspContext();
+            Bottle cmd, reply;
+            cmd.addString("ask");
+            Bottle &subcmd = cmd.addList();
+            for(int i=0 ; i<3 ; i++) subcmd.addDouble(x_d[i]);
+            for(int i=0 ; i<4 ; i++) subcmd.addDouble(o_d[i]);
+            if(grasping_hand == WhichHand::HAND_LEFT)
+            {
+                cmd.addString("left");
+            }
+            else if(grasping_hand == WhichHand::HAND_RIGHT)
+            {
+                cmd.addString("right");
+            }
+            action_render_rpc.write(cmd, reply);
 
-        bool success = icart->askForPose(x_d, o_d, x_d_hat, o_d_hat, q_d_hat);
+            if(reply.size()<1)
+            {
+                yError() << "getPoseCostFunction: empty reply from action rendering module";
+                return false;
+            }
 
-        //  restore previous context
-        icart->restoreContext(context_backup);
-        icart->deleteContext(context_backup);
+            if(reply.get(0).asString() != "ack")
+            {
+                yError() << "getPoseCostFunction: invalid reply from action rendering module:" << reply.toString();
+                return false;
+            }
 
-        if(!success)
-        {
-            yError() << "getPoseCostFunction: could not communicate with kinematics module";
-            return false;
+            if(reply.size()<3)
+            {
+                yError() << "getPoseCostFunction: invlaid reply size from action rendering module" << reply.toString();
+                return false;
+            }
+
+            if(!reply.check("q"))
+            {
+                yError() << "getPoseCostFunction: invalid reply from action rendering module: missing q:" << reply.toString();
+                return false;
+            }
+
+            Bottle *joints = reply.find("q").asList();
+            q_d_hat.resize(joints->size());
+            for(int i=0 ; i<joints->size() ; i++) q_d_hat[i] = joints->get(i).asDouble();
+
+            if(!reply.check("x"))
+            {
+                yError() << "getPoseCostFunction: invalid reply from action rendering module: missing x:" << reply.toString();
+                return false;
+            }
+
+            Bottle *position = reply.find("x").asList();
+            x_d_hat.resize(3);
+            for(int i=0 ; i<3 ; i++) x_d_hat[i] = position->get(i).asDouble();
+            o_d_hat.resize(4);
+            for(int i=0 ; i<4 ; i++) o_d_hat[i] = position->get(3+i).asDouble();
         }
 
         yDebug() << "Requested: " << candidate_pose.toString();
@@ -1223,6 +1306,7 @@ class GraspProcessorModule : public RFModule
 
         refined_grasp_pose_candidates.clear();
 
+        int cnt = 0;
         for(size_t idx=0 ; idx<raw_grasp_pose_candidates.size() ; idx++)
         {
             Matrix pose_candidate = raw_grasp_pose_candidates[idx];
@@ -1274,12 +1358,15 @@ class GraspProcessorModule : public RFModule
                 }
 
                 refined_grasp_pose_candidates.push_back(pose_candidate);
+                cnt++;
             }
             else
             {
                 refined_grasp_pose_candidates.push_back(Matrix());
             }
         }
+
+        yInfo() <<  "getGraspingPoseCandidates: keep" << cnt << "/" << raw_grasp_pose_candidates.size() << "feasible grasping pose candidates";
     }
 
     /****************************************************************/
@@ -1588,7 +1675,23 @@ class GraspProcessorModule : public RFModule
     /****************************************************************/
     bool executeGrasp(Vector &pose)
     {
-        if (robot == "icub")
+        if(robot == "icubsim")
+        {
+            //  simulation context, suppose there is no actionsRenderingEngine running
+            int context_backup;
+            icart->storeContext(&context_backup);
+            setGraspContext();
+            Vector previous_x(3), previous_o(4);
+            icart->getPose(previous_x, previous_o);
+            icart->goToPoseSync(pose.subVector(0, 2), pose.subVector(3,6));
+            icart->waitMotionDone();
+            icart->goToPoseSync(previous_x, previous_o);
+            icart->waitMotionDone();
+            icart->restoreContext(context_backup);
+            icart->deleteContext(context_backup);
+            return true;
+        }
+        else
         {
             //  communication with actionRenderingEngine/cmd:io
             //  grasp("cartesian" x y z gx gy gz theta) ("approach" (-0.05 0 +-0.05 0.0)) "left"/"right"
@@ -1634,22 +1737,7 @@ class GraspProcessorModule : public RFModule
                 return false;
             }
         }
-        else
-        {
-            //  simulation context, suppose there is no actionsRenderingEngine running
-            int context_backup;
-            icart->storeContext(&context_backup);
-            setGraspContext();
-            Vector previous_x(3), previous_o(4);
-            icart->getPose(previous_x, previous_o);
-            icart->goToPoseSync(pose.subVector(0, 2), pose.subVector(3,6));
-            icart->waitMotionDone();
-            icart->goToPoseSync(previous_x, previous_o);
-            icart->waitMotionDone();
-            icart->restoreContext(context_backup);
-            icart->deleteContext(context_backup);
-            return true;
-        }
+
     }
 
 
