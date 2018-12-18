@@ -422,6 +422,8 @@ class GraspProcessorModule : public RFModule
         //  attach callback
         attach(module_rpc);
 
+        halt_requested = false;
+
         //  initialize an empty point cloud to display
         PointCloud<DataXYZRGBA> pc;
         pc.clear();
@@ -492,8 +494,6 @@ class GraspProcessorModule : public RFModule
         vtk_renderWindowInteractor->GetRenderWindow()->SetWindowName("Grasping pose candidates");
         vtk_renderWindowInteractor->Render();
         vtk_renderWindowInteractor->Start();
-
-        halt_requested = false;
 
         return true;
 
@@ -651,7 +651,11 @@ class GraspProcessorModule : public RFModule
             }
 
             if (!requestRefreshPointCloud(pc, obj, fixate_object))
-                return false;
+            {
+                yError() << prettyError( __FUNCTION__,  "Could not refresh point cloud.");
+                reply.addVocab(Vocab::encode("nack"));
+                return true;
+            }
 
             if(halt_requested)
             {
@@ -661,7 +665,11 @@ class GraspProcessorModule : public RFModule
             }
 
             if (!requestRefreshSuperquadric(pc))
-                return false;
+            {
+                yError() << prettyError( __FUNCTION__,  "Could not refresh superquadric.");
+                reply.addVocab(Vocab::encode("nack"));
+                return true;
+            }
 
             if(halt_requested)
             {
@@ -671,7 +679,124 @@ class GraspProcessorModule : public RFModule
             }
 
             if (computeGraspPose(grasp_pose))
-                return false;
+            {
+                yError() << prettyError( __FUNCTION__,  "Could not compute grasping pose.");
+                reply.addVocab(Vocab::encode("nack"));
+                return true;
+            }
+
+            if(halt_requested)
+            {
+                yInfo() << "Halt requested before end of process";
+                reply.addVocab(Vocab::encode("nack"));
+                return true;
+            }
+
+            yInfo() << "Pose retrieved: " << grasp_pose.toString();
+            cmd_success = executeGrasp(grasp_pose);
+        }
+
+        if (command.get(0).toString() == "grasp_from_position")
+        {
+            if(halt_requested)
+            {
+                yInfo() << "Halt requested before end of process";
+                reply.addVocab(Vocab::encode("nack"));
+                return true;
+            }
+
+            //  obtain grasp and render it
+            Vector position3d(3, 0.0);
+            if (command.size() == 3 || command.size() == 4)
+            {
+                Bottle *position3d_bottle = command.get(1).asList();
+
+                if(!position3d_bottle)
+                {
+                    yError() << prettyError( __FUNCTION__,  "Invalid position vector format. Should be a list of double.");
+                    reply.addVocab(Vocab::encode("nack"));
+                    return true;
+                }
+
+                if(position3d_bottle->size() != 3)
+                {
+                    yError() << prettyError( __FUNCTION__,  "Invalid position vector size. Should be 3.");
+                    reply.addVocab(Vocab::encode("nack"));
+                    return true;
+                }
+
+                for(int i=0 ; i<3 ; i++) position3d[i] = position3d_bottle->get(i).asDouble();
+
+                hand = command.get(2).toString();
+                if (hand == "right")
+                {
+                    grasping_hand = WhichHand::HAND_RIGHT;
+                }
+                else if (hand == "left")
+                {
+                    grasping_hand = WhichHand::HAND_LEFT;
+                }
+                else
+                {
+                    reply.addVocab(Vocab::encode("nack"));
+                    return true;
+                }
+                if (command.size() == 4 && command.get(3).toString() == "gaze")
+                {
+                    fixate_object = true;
+                }
+            }
+            else
+            {
+                yError() << prettyError( __FUNCTION__,  "Invalid command size.");
+                reply.addVocab(Vocab::encode("nack"));
+                return true;
+            }
+
+            PointCloud<DataXYZRGBA> pc;
+            yDebug() << "Requested object: " << obj;
+
+            if(halt_requested)
+            {
+                yInfo() << "Halt requested before end of process";
+                reply.addVocab(Vocab::encode("nack"));
+                return true;
+            }
+
+            if (!requestRefreshPointCloudFromPosition(pc, position3d, fixate_object))
+            {
+                yError() << prettyError( __FUNCTION__,  "Could not refresh point cloud.");
+                reply.addVocab(Vocab::encode("nack"));
+                return true;
+            }
+
+            if(halt_requested)
+            {
+                yInfo() << "Halt requested before end of process";
+                reply.addVocab(Vocab::encode("nack"));
+                return true;
+            }
+
+            if (!requestRefreshSuperquadric(pc))
+            {
+                yError() << prettyError( __FUNCTION__,  "Could not refresh superquadric.");
+                reply.addVocab(Vocab::encode("nack"));
+                return true;
+            }
+
+            if(halt_requested)
+            {
+                yInfo() << "Halt requested before end of process";
+                reply.addVocab(Vocab::encode("nack"));
+                return true;
+            }
+
+            if (computeGraspPose(grasp_pose))
+            {
+                yError() << prettyError( __FUNCTION__,  "Could not compute grasping pose.");
+                reply.addVocab(Vocab::encode("nack"));
+                return true;
+            }
 
             if(halt_requested)
             {
@@ -1101,7 +1226,7 @@ class GraspProcessorModule : public RFModule
         {
             if(action_render_rpc.getOutputCount()<1)
             {
-                yError() << prettyError( __FUNCTION__,  "requestRefreshPointCloud: no connection to action rendering module");
+                yError() << prettyError( __FUNCTION__,  "No connection to action rendering module");
                 return false;
             }
 
@@ -1126,7 +1251,80 @@ class GraspProcessorModule : public RFModule
 
         if(point_cloud_rpc.getOutputCount()<1)
         {
-            yError() << prettyError( __FUNCTION__,  "requestRefreshPointCloud: no connection to point cloud module");
+            yError() << prettyError( __FUNCTION__,  "No connection to point cloud module");
+            return false;
+        }
+
+        point_cloud_rpc.write(cmd_request, cmd_reply);
+
+        //  cheap workaround to get the point cloud
+        Bottle* pcBt = cmd_reply.get(0).asList();
+        bool success = point_cloud.fromBottle(*pcBt);
+
+        if (success && (point_cloud.size() > 0))
+        {
+            yDebug() << "Point cloud retrieved; contains " << point_cloud.size() << "points";
+            refreshPointCloud(point_cloud);
+            return true;
+        }
+        else
+        {
+            yError() << prettyError( __FUNCTION__,  "Point cloud null or empty");
+            return false;
+        }
+
+    }
+
+    /****************************************************************/
+    bool requestRefreshPointCloudFromPosition(PointCloud<DataXYZRGBA> &point_cloud, const Vector &position, const bool &fixate_object = false)
+    {
+        //  query point-cloud-read via rpc for the point cloud
+        //  command: get_point_cloud_from_3D_position pos_x pos_y pos_z
+        //  put point cloud into container, return true if operation was ok
+        //  or call refreshpointcloud
+
+        if(position.size() < 3)
+        {
+            yError() << prettyError( __FUNCTION__,  "Invalid position vector dimension. Should be 3.");
+            return false;
+        }
+
+        Bottle cmd_request;
+        Bottle cmd_reply;
+
+        //  if fixate_object is given, look at the object before acquiring the point cloud
+
+        /* TO FIX
+        if (fixate_object)
+        {
+            if(action_render_rpc.getOutputCount()<1)
+            {
+                yError() << prettyError( __FUNCTION__,  "No connection to action rendering module");
+                return false;
+            }
+
+            cmd_request.addVocab(Vocab::encode("look"));
+            cmd_request.addString(object);
+            cmd_request.addString("wait");
+
+            action_render_rpc.write(cmd_request, cmd_reply);
+            if (cmd_reply.get(0).asVocab() != Vocab::encode("ack"))
+            {
+                yError() << prettyError( __FUNCTION__,  "Didn't manage to look at the object");
+                return false;
+            }
+        }*/
+
+        point_cloud.clear();
+        cmd_request.clear();
+        cmd_reply.clear();
+
+        cmd_request.addString("get_point_cloud_from_3D_position");
+        for(int i=0 ; i<3 ; i++) cmd_request.addDouble(position[i]);
+
+        if(point_cloud_rpc.getOutputCount()<1)
+        {
+            yError() << prettyError( __FUNCTION__,  "No connection to point cloud module");
             return false;
         }
 
@@ -1902,7 +2100,8 @@ class GraspProcessorModule : public RFModule
 
 
 public:
-    GraspProcessorModule(): closing(false), planar_obstacle(4, 0.0), grasper_bounding_box(6, 0.0), obstacle_safety_distance(0.005),
+    GraspProcessorModule(): closing(false), halt_requested(false),
+        planar_obstacle(4, 0.0), grasper_bounding_box(6, 0.0), obstacle_safety_distance(0.005),
         grasping_hand(WhichHand::HAND_RIGHT), min_object_size(3, 0.0), max_object_size(3, std::numeric_limits<double>::max()),
         grasper_specific_transform_right(eye(4,4)), grasper_specific_transform_left(eye(4,4)),
         grasper_approach_parameters_right(4, 0.0), grasper_approach_parameters_left(4, 0.0)
