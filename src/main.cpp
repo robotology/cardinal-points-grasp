@@ -16,6 +16,7 @@
 #include <cmath>
 #include <algorithm>
 #include <memory>
+#include <atomic>
 
 #include <yarp/os/all.h>
 #include <yarp/sig/all.h>
@@ -133,6 +134,7 @@ class GraspProcessorModule : public RFModule
     RpcServer module_rpc;   //will be replaced by idl services
 
     bool closing;
+    std::atomic<bool> halt_requested;
 
     string robot;
     WhichHand grasping_hand;
@@ -491,6 +493,8 @@ class GraspProcessorModule : public RFModule
         vtk_renderWindowInteractor->Render();
         vtk_renderWindowInteractor->Start();
 
+        halt_requested = false;
+
         return true;
 
     }
@@ -599,6 +603,13 @@ class GraspProcessorModule : public RFModule
 
         if (command.get(0).toString() == "grasp")
         {
+            if(halt_requested)
+            {
+                yInfo() << "Halt requested before end of process";
+                reply.addVocab(Vocab::encode("nack"));
+                return true;
+            }
+
             //  obtain grasp and render it
             if (command.size() == 3 || command.size() == 4)
             {
@@ -621,26 +632,56 @@ class GraspProcessorModule : public RFModule
                 {
                     fixate_object = true;
                 }
-
             }
             else
             {
+                yError() << prettyError( __FUNCTION__,  "Invalid command size");
                 reply.addVocab(Vocab::encode("nack"));
                 return true;
             }
+
             PointCloud<DataXYZRGBA> pc;
             yDebug() << "Requested object: " << obj;
-            if (requestRefreshPointCloud(pc, obj, fixate_object))
+
+            if(halt_requested)
             {
-                if (requestRefreshSuperquadric(pc))
-                {
-                    if (computeGraspPose(grasp_pose))
-                    {
-                        yInfo() << "Pose retrieved: " << grasp_pose.toString();
-                        cmd_success = executeGrasp(grasp_pose);
-                    }
-                }
+                yInfo() << "Halt requested before end of process";
+                reply.addVocab(Vocab::encode("nack"));
+                return true;
             }
+
+            if (!requestRefreshPointCloud(pc, obj, fixate_object))
+                return false;
+
+            if(halt_requested)
+            {
+                yInfo() << "Halt requested before end of process";
+                reply.addVocab(Vocab::encode("nack"));
+                return true;
+            }
+
+            if (!requestRefreshSuperquadric(pc))
+                return false;
+
+            if(halt_requested)
+            {
+                yInfo() << "Halt requested before end of process";
+                reply.addVocab(Vocab::encode("nack"));
+                return true;
+            }
+
+            if (computeGraspPose(grasp_pose))
+                return false;
+
+            if(halt_requested)
+            {
+                yInfo() << "Halt requested before end of process";
+                reply.addVocab(Vocab::encode("nack"));
+                return true;
+            }
+
+            yInfo() << "Pose retrieved: " << grasp_pose.toString();
+            cmd_success = executeGrasp(grasp_pose);
         }
 
         if (command.get(0).toString() == "from_off_file")
@@ -936,6 +977,18 @@ class GraspProcessorModule : public RFModule
                 reply.addVocab(Vocab::encode("nack"));
                 return true;
             }
+        }
+
+        if (command.get(0).toString() == "restart")
+        {
+            halt_requested = false;
+            reply.addVocab(Vocab::encode("ack"));
+        }
+
+        if (command.get(0).toString() == "halt")
+        {
+            halt_requested = true;
+            reply.addVocab(Vocab::encode("ack"));
         }
 
         reply.addVocab(Vocab::encode(cmd_success ? "ack":"nack"));
