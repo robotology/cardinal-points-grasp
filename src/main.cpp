@@ -57,6 +57,16 @@ Mutex mutex;
 
 /****************************************************************/
 
+string prettyError(const char* func_name, const string &message)
+{
+    //  Nice formatting for errors
+    stringstream error;
+    error << "[" << func_name << "] " << message;
+    return error.str();
+}
+
+/****************************************************************/
+
 class UpdateCommand : public vtkCommand
 {
     const bool *closing;
@@ -199,7 +209,7 @@ class GraspProcessorModule : public RFModule
             }
             else
             {
-                yError()<<"Invalid grasp_trsfm_right dimension in config. Should be 7.";
+                yError() << prettyError(__FUNCTION__, "Invalid grasp_trsfm_right dimension in config. Should be 7.");
                 valid_grasp_specific_transform = false;
             }
         }
@@ -231,7 +241,7 @@ class GraspProcessorModule : public RFModule
             }
             else
             {
-                yError() << "Invalid grasp_trsfm_left dimension in config. Should be 7.";
+                yError() << prettyError(__FUNCTION__, "Invalid grasp_trsfm_left dimension in config. Should be 7.");
                 valid_grasp_specific_transform = false;
             }
         }
@@ -258,7 +268,7 @@ class GraspProcessorModule : public RFModule
             }
             else
             {
-                yError()<<"Invalid approach_right dimension in config. Should be 4.";
+                yError() << prettyError(__FUNCTION__, "Invalid approach_right dimension in config. Should be 4.");
             }
         }
         else if((robot == "icubSim") || (robot == "icub"))
@@ -279,7 +289,7 @@ class GraspProcessorModule : public RFModule
             }
             else
             {
-                yError()<<"Invalid approach_left dimension in config. Should be 4.";
+                yError() << prettyError(__FUNCTION__, "Invalid approach_left dimension in config. Should be 4.");
             }
         }
         else if((robot == "icubSim") || (robot == "icub"))
@@ -300,7 +310,7 @@ class GraspProcessorModule : public RFModule
             }
             else
             {
-                yError() << "Invalid grasp_bounding_box dimension in config. Should be 6.";
+                yError() << prettyError(__FUNCTION__, "Invalid grasp_bounding_box dimension in config. Should be 6.");
             }
         }
         yInfo() << "Grabber bounding box loaded\n" << grasper_bounding_box.toString();
@@ -318,7 +328,7 @@ class GraspProcessorModule : public RFModule
                 planar_obstacle[1] = 0.0;
                 planar_obstacle[2] = 1;
                 planar_obstacle[3] = -(-0.15);
-                yError() << "Invalid planar_obstacle dimension in config. Should be 4.";
+                yError() << prettyError(__FUNCTION__, "Invalid planar_obstacle dimension in config. Should be 4.");
             }
         }
         yInfo() << "Planar obstacle loaded\n" << planar_obstacle.toString();
@@ -353,7 +363,7 @@ class GraspProcessorModule : public RFModule
             {
                 if (!left_arm_client.open(optionLeftArm))
                 {
-                    yError() << "Could not open cartesian solver client for left arm";
+                    yError() << prettyError( __FUNCTION__, "Could not open cartesian solver client for left arm");
                     return false;
                 }
             }
@@ -365,7 +375,7 @@ class GraspProcessorModule : public RFModule
                     {
                         left_arm_client.close();
                     }
-                    yError() << "Could not open cartesian solver client for right arm";
+                    yError() << prettyError( __FUNCTION__, "Could not open cartesian solver client for right arm");
                     return false;
                 }
             }
@@ -632,7 +642,7 @@ class GraspProcessorModule : public RFModule
 
             if (!file.is_open())
             {
-                yError() << "Unable to open file";
+                yError() << prettyError( __FUNCTION__,  "Unable to open file");
                 reply.addVocab(Vocab::encode("nack"));
                 return false;
             }
@@ -642,7 +652,7 @@ class GraspProcessorModule : public RFModule
             getline(file, line);
             if (line != "COFF")
             {
-                yError() << "File parsing failed";
+                yError() << prettyError( __FUNCTION__,  "File parsing failed");
                 reply.addVocab(Vocab::encode("nack"));
                 return false;
             }
@@ -1002,7 +1012,7 @@ class GraspProcessorModule : public RFModule
         {
             if(action_render_rpc.getOutputCount()<1)
             {
-                yError() << "requestRefreshPointCloud: no connection to action rendering module";
+                yError() << prettyError( __FUNCTION__,  "requestRefreshPointCloud: no connection to action rendering module");
                 return false;
             }
 
@@ -1013,7 +1023,7 @@ class GraspProcessorModule : public RFModule
             action_render_rpc.write(cmd_request, cmd_reply);
             if (cmd_reply.get(0).asVocab() != Vocab::encode("ack"))
             {
-                yError() << "Didn't manage to look at the object";
+                yError() << prettyError( __FUNCTION__,  "Didn't manage to look at the object");
                 return false;
             }
         }
@@ -1027,7 +1037,7 @@ class GraspProcessorModule : public RFModule
 
         if(point_cloud_rpc.getOutputCount()<1)
         {
-            yError() << "requestRefreshPointCloud: no connection to point cloud module";
+            yError() << prettyError( __FUNCTION__,  "requestRefreshPointCloud: no connection to point cloud module");
             return false;
         }
 
@@ -1045,7 +1055,7 @@ class GraspProcessorModule : public RFModule
         }
         else
         {
-            yError() << "Point cloud null or empty";
+            yError() << prettyError( __FUNCTION__,  "Point cloud null or empty");
             return false;
         }
 
@@ -1063,7 +1073,7 @@ class GraspProcessorModule : public RFModule
 
         if(superq_rpc.getOutputCount()<1)
         {
-            yError() << "requestRefreshSuperquadric: no connection to superquadric module";
+            yError() << prettyError( __FUNCTION__,  "requestRefreshSuperquadric: no connection to superquadric module");
             return false;
         }
 
@@ -1079,7 +1089,7 @@ class GraspProcessorModule : public RFModule
         }
         else
         {
-            yError() << "Retrieved superquadric is invalid! " << superq_parameters.toString();
+            yError() << prettyError( __FUNCTION__,  "Retrieved superquadric is invalid!") << superq_parameters.toString();
             return false;
         }
 
@@ -1142,7 +1152,7 @@ class GraspProcessorModule : public RFModule
 
         if(super_quadric_parameters.size() != 10)
         {
-            yError() << "getPoseCostFunction: invalid superquadric parameters vector dimensions";
+            yError() << prettyError( __FUNCTION__,  "getPoseCostFunction: invalid superquadric parameters vector dimensions");
             return false ;
         }
 
@@ -1165,7 +1175,7 @@ class GraspProcessorModule : public RFModule
             }
             else
             {
-                yError() << "getPoseCostFunction: Invalid arm selected for kinematic!";
+                yError() << prettyError( __FUNCTION__,  "getPoseCostFunction: Invalid arm selected for kinematic!");
                 return false;
             }
 
@@ -1184,7 +1194,7 @@ class GraspProcessorModule : public RFModule
 
             if(!success)
             {
-                yError() << "getPoseCostFunction: could not communicate with kinematics module";
+                yError() << prettyError( __FUNCTION__,  "getPoseCostFunction: could not communicate with kinematics module");
                 return false;
             }
         }
@@ -1192,7 +1202,7 @@ class GraspProcessorModule : public RFModule
         {
             if(action_render_rpc.getOutputCount()<1)
             {
-                yError() << "getPoseCostFunction: no connection to action rendering module";
+                yError() << prettyError( __FUNCTION__,  "getPoseCostFunction: no connection to action rendering module");
                 return false;
             }
 
@@ -1213,25 +1223,25 @@ class GraspProcessorModule : public RFModule
 
             if(reply.size()<1)
             {
-                yError() << "getPoseCostFunction: empty reply from action rendering module";
+                yError() << prettyError( __FUNCTION__,  "getPoseCostFunction: empty reply from action rendering module");
                 return false;
             }
 
             if(reply.get(0).asVocab() != Vocab::encode("ack"))
             {
-                yError() << "getPoseCostFunction: invalid reply from action rendering module:" << reply.toString();
+                yError() << prettyError( __FUNCTION__,  "getPoseCostFunction: invalid reply from action rendering module:") << reply.toString();
                 return false;
             }
 
             if(reply.size()<3)
             {
-                yError() << "getPoseCostFunction: invlaid reply size from action rendering module" << reply.toString();
+                yError() << prettyError( __FUNCTION__,  "getPoseCostFunction: invlaid reply size from action rendering module") << reply.toString();
                 return false;
             }
 
             if(!reply.check("q"))
             {
-                yError() << "getPoseCostFunction: invalid reply from action rendering module: missing q:" << reply.toString();
+                yError() << prettyError( __FUNCTION__,  "getPoseCostFunction: invalid reply from action rendering module: missing q:") << reply.toString();
                 return false;
             }
 
@@ -1241,7 +1251,7 @@ class GraspProcessorModule : public RFModule
 
             if(!reply.check("x"))
             {
-                yError() << "getPoseCostFunction: invalid reply from action rendering module: missing x:" << reply.toString();
+                yError() << prettyError( __FUNCTION__,  "getPoseCostFunction: invalid reply from action rendering module: missing x:") << reply.toString();
                 return false;
             }
 
@@ -1505,7 +1515,7 @@ class GraspProcessorModule : public RFModule
 
             if (!candidate_pose->setHomogeneousTransform(candidate_pose->pose_rotation, candidate_pose->pose_translation))
             {
-                yError() << "Error setting homogeneous transform!";
+                yError() << prettyError( __FUNCTION__,  "Error setting homogeneous transform!");
                 continue;
             }
 
@@ -1538,7 +1548,7 @@ class GraspProcessorModule : public RFModule
     {
         if (super_quadric_parameters.size() < 0)
         {
-            yError() << "getBestCandidatePose: invalid superquadric parameters vector dimensions";
+            yError() << prettyError( __FUNCTION__,  "getBestCandidatePose: invalid superquadric parameters vector dimensions");
             return false;
         }
 
@@ -1551,7 +1561,7 @@ class GraspProcessorModule : public RFModule
             {
                 if(!(this->getPoseCostFunction(super_quadric_parameters, grasp_pose_candidates[i], costs[i])))
                 {
-                    yError() << "getBestCandidatePose: could not compute grasping pose cost function";
+                    yError() << prettyError( __FUNCTION__,  "getBestCandidatePose: could not compute grasping pose cost function");
                     return false;
                 }
             }
@@ -1575,7 +1585,7 @@ class GraspProcessorModule : public RFModule
 
         if (min_pose_cost_function_0 > 0.01)
         {
-            yError() << "getBestCandidatePose: no valid pose candidate";
+            yError() << prettyError( __FUNCTION__,  "getBestCandidatePose: no valid pose candidate");
             return false;
         }
 
@@ -1635,7 +1645,7 @@ class GraspProcessorModule : public RFModule
             }
             else
             {
-                yError() << "Failure retrieving fixed pose";
+                yError() << prettyError( __FUNCTION__,  "Failure retrieving fixed pose");
                 return false;
             }
         }
@@ -1803,7 +1813,7 @@ int main(int argc, char *argv[])
 
     if (!yarp.checkNetwork())
     {
-        yError() << "YARP network not detected. Check nameserver";
+        yError() << prettyError(__FUNCTION__, "YARP network not detected. Check nameserver");
         return EXIT_FAILURE;
     }
 
