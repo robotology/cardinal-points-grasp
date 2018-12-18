@@ -165,8 +165,8 @@ class GraspProcessorModule : public RFModule
     Vector planar_obstacle; // plane to avoid, typically a table (format (a b c d) following plane equation a.x+b.y+c.z+d=0)
     Vector grasper_bounding_box; // bounding box of the grasper (x_min x_max y_min _y_max z_min z_max) expressed in the robot grasper frame used by the controller
     double obstacle_safety_distance; // minimal distance to respect between the grasper and the obstacle
-    double palm_width;
-    double finger_length;
+    Vector min_object_size;
+    Vector max_object_size;
     Matrix grasper_specific_transform_right;
     Matrix grasper_specific_transform_left;
     Vector grasper_approach_parameters_right;
@@ -195,9 +195,45 @@ class GraspProcessorModule : public RFModule
         w = rf.check("width", Value(600)).asInt();
         h = rf.check("height", Value(600)).asInt();
 
+        Bottle *list = rf.find("min_object_size").asList();
+        if(list)
+        {
+            if(list->size() == 3)
+            {
+                for(int i=0 ; i<3 ; i++) min_object_size[i] = list->get(i).asDouble();
+            }
+            else
+            {
+                yError() << prettyError(__FUNCTION__, "Invalid min_object_Size dimension in config. Should be 3.");
+            }
+        }
+        else if((robot == "icubSim") || (robot == "icub"))
+        {
+            min_object_size[1] = 0.04;
+        }
+        yInfo() << "Grabber specific min graspable object size loaded\n" << min_object_size.toString();
+
+        list = rf.find("max_object_size").asList();
+        if(list)
+        {
+            if(list->size() == 3)
+            {
+                for(int i=0 ; i<3 ; i++) max_object_size[i] = list->get(i).asDouble();
+            }
+            else
+            {
+                yError() << prettyError(__FUNCTION__, "Invalid max_object_Size dimension in config. Should be 3.");
+            }
+        }
+        else if((robot == "icubSim") || (robot == "icub"))
+        {
+            max_object_size[0] = 0.12;
+        }
+        yInfo() << "Grabber specific max graspable object size loaded\n" << max_object_size.toString();
+
         Vector grasp_specific_translation(3, 0.0);
         Vector grasp_specific_orientation(4, 0.0);
-        Bottle *list = rf.find("grasp_trsfm_right").asList();
+        list = rf.find("grasp_trsfm_right").asList();
         bool valid_grasp_specific_transform = true;
 
         if(list)
@@ -1122,14 +1158,20 @@ class GraspProcessorModule : public RFModule
 
         /*
          * Filtering parameters:
-         * 1 - grasp width wrt hand x axis
-         * 2 - sufficient size wrt palm width
+         * 1 - object large enough for grasping
+         * 2 - object small enough for grasping
          * 3 - thumb cannot point down
+         * 4 - palm cannot point up
          */
 
         bool ok1, ok2, ok3, ok4;
-        ok1 = pose_ax_size(0) * 2 < 1.5 * finger_length;
-        ok2 = pose_ax_size(1) * 2 > palm_width/2;
+        for(int i=0 ; i<3 ; i++)
+        {
+            double object_size = 2*pose_ax_size[i];
+            ok1 &= (object_size > min_object_size[i]);
+            ok2 &= (object_size < max_object_size[i]);
+        }
+
         ok3 = dot(pose_mat_rotation.getCol(1), root_z_axis) <= 0.1;
         if (grasping_hand == WhichHand::HAND_RIGHT)
         {
@@ -1808,8 +1850,9 @@ class GraspProcessorModule : public RFModule
 
 public:
     GraspProcessorModule(): closing(false), planar_obstacle(4, 0.0), grasper_bounding_box(6, 0.0), obstacle_safety_distance(0.005),
-        palm_width(0.08), finger_length(0.08), grasping_hand(WhichHand::HAND_RIGHT), grasper_specific_transform_right(eye(4,4)),
-        grasper_specific_transform_left(eye(4,4)), grasper_approach_parameters_right(4, 0.0), grasper_approach_parameters_left(4, 0.0)
+        grasping_hand(WhichHand::HAND_RIGHT), min_object_size(3, 0.0), max_object_size(3, std::numeric_limits<double>::max()),
+        grasper_specific_transform_right(eye(4,4)), grasper_specific_transform_left(eye(4,4)),
+        grasper_approach_parameters_right(4, 0.0), grasper_approach_parameters_left(4, 0.0)
     {
         planar_obstacle[2] = 1;
         planar_obstacle[3] = -(-0.15);
