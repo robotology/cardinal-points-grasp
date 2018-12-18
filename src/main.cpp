@@ -1603,7 +1603,7 @@ class GraspProcessorModule : public RFModule
     {
         //  fix the pose offset accordint to iolReachingCalibration
         //  pose is supposed to be (x y z gx gy gz theta)
-        if (robot == "icub" && reach_calib_rpc.getOutputCount() > 0)
+        if ((robot == "r1" || robot == "icub") && reach_calib_rpc.getOutputCount() > 0)
         {
             Bottle command, reply;
 
