@@ -1635,7 +1635,12 @@ class GraspProcessorModule : public RFModule
             reach_calib_rpc.write(command, reply);
 
             //  incoming reply is going to be (success x y z)
-            if (reply.get(0).asVocab() == Vocab::encode("ok"))
+            if (reply.size() < 2)
+            {
+                yError() << prettyError( __FUNCTION__,  "Failure retrieving fixed pose");
+                return false;
+            }
+            else if (reply.get(0).asVocab() == Vocab::encode("ok"))
             {
                 poseFixed = poseToFix;
                 poseFixed(0) = reply.get(1).asDouble();
@@ -1645,16 +1650,13 @@ class GraspProcessorModule : public RFModule
             }
             else
             {
-                yError() << prettyError( __FUNCTION__,  "Failure retrieving fixed pose");
-                return false;
+                yWarning() << "Couldn't retrieve fixed pose. Continuing with unchanged pose";
             }
-        }
-        else
-        {
-            //  if we are working with the simulator, the pose doesn't need to be corrected
-            poseFixed = poseToFix;
-            yWarning() << "Connection to iolReachingCalibration not detected: pose will not be changed";
-            return true;
+
+        //  if we are working with the simulator or there is no calib map, the pose doesn't need to be corrected
+        poseFixed = poseToFix;
+        yWarning() << "Connection to iolReachingCalibration not detected or calibration map not present: pose will not be changed";
+        return true;
         }
     }
 
