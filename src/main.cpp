@@ -703,7 +703,17 @@ class GraspProcessorModule : public RFModule
             }
 
             yInfo() << "Pose retrieved: " << grasp_pose.toString();
-            cmd_success = executeGrasp(grasp_pose);
+
+            if (!executeGrasp(grasp_pose))
+            {
+                yError() << prettyError( __FUNCTION__,  "Could not perform the grasping.");
+                reply.addVocab(Vocab::encode("nack"));
+                return true;
+            }
+
+            yInfo() << obj << "grasped";
+            reply.addVocab(Vocab::encode("ack"));
+            return true;
         }
 
         if (command.get(0).toString() == "grasp_from_position")
@@ -814,7 +824,17 @@ class GraspProcessorModule : public RFModule
             }
 
             yInfo() << "Pose retrieved: " << grasp_pose.toString();
-            cmd_success = executeGrasp(grasp_pose);
+
+            if (!executeGrasp(grasp_pose))
+            {
+                yError() << prettyError( __FUNCTION__,  "Could not perform the grasping.");
+                reply.addVocab(Vocab::encode("nack"));
+                return true;
+            }
+
+            yInfo() << "Object grasped";
+            reply.addVocab(Vocab::encode("ack"));
+            return true;
         }
 
         if (command.get(0).toString() == "from_off_file")
