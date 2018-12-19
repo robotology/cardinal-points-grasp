@@ -13,7 +13,7 @@ Simple superquadric-based grasping pose generator and renderer for iCub
 ### Installation
 ```
 git clone https://github.com/fbottarel/cardinal-points-grasp.git
-cd grasp-pose-gen
+cd cardinal-points-grasp
 mkdir build && cd build
 cmake ../
 make install
@@ -25,7 +25,7 @@ make install
 
 ### Usage
 This module is supposed to be used to generate and execute grasps on simple objects that lie on a surface (e.g. a table) in front of the robot. Given an object to grasp, the following actions get undertaken:
-1. `grasp-pose-gen` interfaces with [point-cloud-read](https://github.com/fbottarel/point-cloud-read) to retrieve a point cloud (if the object is present in the scene).
+1. `cardinal-points-grasp` interfaces with [point-cloud-read](https://github.com/fbottarel/point-cloud-read) to retrieve a point cloud (if the object is present in the scene).
 2. The point cloud is sent to [find-superquadric](https://github.com/pattacini/find-superquadric) and the parameters of the superquadric shape that best fits the point cloud are obtained. 
 3. A number of feasible side and top grasps are generated and displayed according to the size and position of the resulting superquadric. The module makes sure that none of the poses are unreachable by the robot. 
 4. The candidate grasps are ranked according to a hierarchical cost function that takes into account, in order
