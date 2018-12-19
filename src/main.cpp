@@ -1298,7 +1298,6 @@ class GraspProcessorModule : public RFModule
 
         //  if fixate_object is given, look at the object before acquiring the point cloud
 
-        /* TO FIX
         if (fixate_object)
         {
             if(action_render_rpc.getOutputCount()<1)
@@ -1308,7 +1307,9 @@ class GraspProcessorModule : public RFModule
             }
 
             cmd_request.addVocab(Vocab::encode("look"));
-            cmd_request.addString(object);
+            Bottle &subcmd_request = cmd_request.addList();
+            subcmd_request.addString("cartesian");
+            for(int i=0 ; i<3 ; i++) subcmd_request.addDouble(position[i]);
             cmd_request.addString("wait");
 
             action_render_rpc.write(cmd_request, cmd_reply);
@@ -1317,7 +1318,7 @@ class GraspProcessorModule : public RFModule
                 yError() << prettyError( __FUNCTION__,  "Didn't manage to look at the object");
                 return false;
             }
-        }*/
+        }
 
         point_cloud.clear();
         cmd_request.clear();
