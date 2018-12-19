@@ -678,7 +678,7 @@ class GraspProcessorModule : public RFModule
                 return true;
             }
 
-            if (computeGraspPose(grasp_pose))
+            if (!computeGraspPose(grasp_pose))
             {
                 yError() << prettyError( __FUNCTION__,  "Could not compute grasping pose.");
                 reply.addVocab(Vocab::encode("nack"));
@@ -753,9 +753,6 @@ class GraspProcessorModule : public RFModule
                 return true;
             }
 
-            PointCloud<DataXYZRGBA> pc;
-            yDebug() << "Requested object: " << obj;
-
             if(halt_requested)
             {
                 yInfo() << "Halt requested before end of process";
@@ -763,6 +760,7 @@ class GraspProcessorModule : public RFModule
                 return true;
             }
 
+            PointCloud<DataXYZRGBA> pc;
             if (!requestRefreshPointCloudFromPosition(pc, position3d, fixate_object))
             {
                 yError() << prettyError( __FUNCTION__,  "Could not refresh point cloud.");
@@ -791,7 +789,7 @@ class GraspProcessorModule : public RFModule
                 return true;
             }
 
-            if (computeGraspPose(grasp_pose))
+            if (!computeGraspPose(grasp_pose))
             {
                 yError() << prettyError( __FUNCTION__,  "Could not compute grasping pose.");
                 reply.addVocab(Vocab::encode("nack"));
