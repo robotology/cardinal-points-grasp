@@ -174,6 +174,9 @@ class GraspProcessorModule : public RFModule
     Vector grasper_approach_parameters_right;
     Vector grasper_approach_parameters_left;
 
+    // Filtering constants
+    double position_error_threshold;
+
     //  visualization parameters
     int x, y, h, w;
 
@@ -374,6 +377,9 @@ class GraspProcessorModule : public RFModule
 
         obstacle_safety_distance = rf.check("obstacle_safety_distance", Value(0.0)).asDouble();
         yInfo() << "Obstacle safety distance loaded=" << obstacle_safety_distance;
+
+        position_error_threshold = rf.check("position_error_threshold", Value(0.01)).asDouble();
+        yInfo() << "Position error threshold loaded=" << position_error_threshold;
 
         //  open the necessary ports
         superq_rpc.open("/" + moduleName + "/superquadricRetrieve:rpc");
@@ -1883,10 +1889,9 @@ class GraspProcessorModule : public RFModule
 
         //  compose a vector of cost functions
         vector <CostEntry> sorted_costs;
-        double position_threshold = 0.01;
         for (size_t i=0; i<costs.size(); i++)
         {
-            if (costs[i][0] < position_threshold)
+            if (costs[i][0] < position_error_threshold)
                 sorted_costs.push_back(CostEntry(costs[i], grasp_pose_candidates[i], i));
         }
 
@@ -2102,7 +2107,8 @@ public:
         planar_obstacle(4, 0.0), grasper_bounding_box(6, 0.0), obstacle_safety_distance(0.005),
         grasping_hand(WhichHand::HAND_RIGHT), min_object_size(3, 0.0), max_object_size(3, std::numeric_limits<double>::max()),
         grasper_specific_transform_right(eye(4,4)), grasper_specific_transform_left(eye(4,4)),
-        grasper_approach_parameters_right(4, 0.0), grasper_approach_parameters_left(4, 0.0)
+        grasper_approach_parameters_right(4, 0.0), grasper_approach_parameters_left(4, 0.0),
+        position_error_threshold(0.01)
     {
         planar_obstacle[2] = 1;
         planar_obstacle[3] = -(-0.15);
