@@ -1567,44 +1567,94 @@ class GraspProcessorModule : public RFModule
             }
         }
 
-        //  compute which is the best pose wrt cost function
-
-        double min_pose_cost_function_0 = std::numeric_limits<double>::max();
-        int min_pose_cost_function_0_index = 0;
-        for(int i=0 ; i<costs.size() ; i++)
+        struct CostEntry
         {
-            if(costs[i][0] < min_pose_cost_function_0)
+            //  define a cost entry structure to better handle
+            //  sorting of the costs
+            double cost_position;
+            double cost_orientation;
+            int pose_original_index;
+            Matrix pose;
+
+            CostEntry(const Vector &cost, const Matrix &grasp_candidate, const int &idx): cost_position(cost(0)), cost_orientation(cost(1)), pose(grasp_candidate), pose_original_index(idx) {}
+
+            bool operator < (const CostEntry& ent) const
             {
-                min_pose_cost_function_0 = costs[i][0];
-                min_pose_cost_function_0_index = i;
+                //  the cost functions are sorted according to the orientation component
+                return (cost_orientation < ent.cost_orientation);
             }
+
+            bool operator > (const CostEntry& ent) const
+            {
+                return (cost_orientation > ent.cost_orientation);
+            }
+        };
+
+        //  compose a vector of cost functions
+        vector <CostEntry> sorted_costs;
+        double position_threshold = 0.01;
+        for (size_t i=0; i<costs.size(); i++)
+        {
+            if (costs[i][0] < position_threshold)
+                sorted_costs.push_back(CostEntry(costs[i], grasp_pose_candidates[i], i));
         }
 
-        //  select candidate with the best orientation precision
-        //  precision of less than 1 cm is not accepted
-
-        if (min_pose_cost_function_0 > 0.01)
+        //  sort them
+        if (sorted_costs.size() > 0)
         {
-            yError() << prettyError( __FUNCTION__,  "getBestCandidatePose: no valid pose candidate");
+            std::sort(sorted_costs.begin(), sorted_costs.end());
+
+            //  best grasp pose is the first in the vector
+            best_pose_index = sorted_costs[0].pose_original_index;
+            yInfo() << "getBestCandidatePose: best candidate cost: " << costs[best_pose_index].toString();
+
+            return true;
+        }
+        else
+        {
+            yWarning() << "getBestCandidatePose: no candidate pose is within position accuracy requirements.";
+
             return false;
         }
 
-        double min_pose_cost_function_1 = costs[min_pose_cost_function_0_index][1];
-        int best_candidate_index = min_pose_cost_function_0_index;
-        for(int i=0 ; i<costs.size() ; i++)
-        {
-            if((costs[i][0] - min_pose_cost_function_0 < 0.002) && (costs[i][1] < min_pose_cost_function_1))
-            {
-                min_pose_cost_function_1 = costs[i][1];
-                best_candidate_index = i;
-            }
-        }
+//        //  compute which is the best pose wrt cost function
 
-        best_pose_index = best_candidate_index;
+//        double min_pose_cost_function_0 = std::numeric_limits<double>::max();
+//        int min_pose_cost_function_0_index = 0;
+//        for(int i=0 ; i<costs.size() ; i++)
+//        {
+//            if(costs[i][0] < min_pose_cost_function_0)
+//            {
+//                min_pose_cost_function_0 = costs[i][0];
+//                min_pose_cost_function_0_index = i;
+//            }
+//        }
 
-        yInfo() << "getBestCandidatePose: best candidate cost: " << costs[best_candidate_index].toString();
+//        //  select candidate with the best orientation precision
+//        //  precision of less than 1 cm is not accepted
 
-        return true;
+//        if (min_pose_cost_function_0 > 0.01)
+//        {
+//            yError() << prettyError( __FUNCTION__,  "getBestCandidatePose: no valid pose candidate");
+//            return false;
+//        }
+
+//        double min_pose_cost_function_1 = costs[min_pose_cost_function_0_index][1];
+//        int best_candidate_index = min_pose_cost_function_0_index;
+//        for(int i=0 ; i<costs.size() ; i++)
+//        {
+//            if((costs[i][0] - min_pose_cost_function_0 < 0.002) && (costs[i][1] < min_pose_cost_function_1))
+//            {
+//                min_pose_cost_function_1 = costs[i][1];
+//                best_candidate_index = i;
+//            }
+//        }
+
+//        best_pose_index = best_candidate_index;
+
+//        yInfo() << "getBestCandidatePose: best candidate cost: " << costs[best_pose_index].toString();
+
+//        return true;
     }
 
     /****************************************************************/
