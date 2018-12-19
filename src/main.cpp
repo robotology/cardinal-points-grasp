@@ -1617,44 +1617,6 @@ class GraspProcessorModule : public RFModule
             return false;
         }
 
-//        //  compute which is the best pose wrt cost function
-
-//        double min_pose_cost_function_0 = std::numeric_limits<double>::max();
-//        int min_pose_cost_function_0_index = 0;
-//        for(int i=0 ; i<costs.size() ; i++)
-//        {
-//            if(costs[i][0] < min_pose_cost_function_0)
-//            {
-//                min_pose_cost_function_0 = costs[i][0];
-//                min_pose_cost_function_0_index = i;
-//            }
-//        }
-
-//        //  select candidate with the best orientation precision
-//        //  precision of less than 1 cm is not accepted
-
-//        if (min_pose_cost_function_0 > 0.01)
-//        {
-//            yError() << prettyError( __FUNCTION__,  "getBestCandidatePose: no valid pose candidate");
-//            return false;
-//        }
-
-//        double min_pose_cost_function_1 = costs[min_pose_cost_function_0_index][1];
-//        int best_candidate_index = min_pose_cost_function_0_index;
-//        for(int i=0 ; i<costs.size() ; i++)
-//        {
-//            if((costs[i][0] - min_pose_cost_function_0 < 0.002) && (costs[i][1] < min_pose_cost_function_1))
-//            {
-//                min_pose_cost_function_1 = costs[i][1];
-//                best_candidate_index = i;
-//            }
-//        }
-
-//        best_pose_index = best_candidate_index;
-
-//        yInfo() << "getBestCandidatePose: best candidate cost: " << costs[best_pose_index].toString();
-
-//        return true;
     }
 
     /****************************************************************/
