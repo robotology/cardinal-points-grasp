@@ -1,4 +1,4 @@
-# grasp-pose-gen
+# cardinal-points-grasp
 
 Simple superquadric-based grasping pose generator and renderer for iCub 
 
@@ -12,7 +12,7 @@ Simple superquadric-based grasping pose generator and renderer for iCub
 
 ### Installation
 ```
-git clone https://github.com/fbottarel/grasp-pose-gen.git
+git clone https://github.com/fbottarel/cardinal-points-grasp.git
 cd grasp-pose-gen
 mkdir build && cd build
 cmake ../
