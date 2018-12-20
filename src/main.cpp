@@ -129,7 +129,6 @@ class GraspProcessorModule : public RFModule
     RpcClient superq_rpc;
     RpcClient point_cloud_rpc;
     RpcClient action_render_rpc;
-    RpcClient action_render_rpc_interrupt;
     RpcClient reach_calib_rpc;
     RpcClient table_calib_rpc;
     RpcServer module_rpc;   //will be replaced by idl services
@@ -386,7 +385,6 @@ class GraspProcessorModule : public RFModule
         superq_rpc.open("/" + moduleName + "/superquadricRetrieve:rpc");
         point_cloud_rpc.open("/" + moduleName + "/pointCloud:rpc");
         action_render_rpc.open("/" + moduleName + "/actionRenderer:rpc");
-        action_render_rpc_interrupt.open("/" + moduleName + "/actionRendererInterrupt:rpc");
         reach_calib_rpc.open("/" + moduleName + "/reachingCalibration:rpc");
         table_calib_rpc.open("/" + moduleName + "/tableCalib:rpc");
         module_rpc.open("/" + moduleName + "/cmd:rpc");
@@ -525,7 +523,6 @@ class GraspProcessorModule : public RFModule
         superq_rpc.interrupt();
         point_cloud_rpc.interrupt();
         action_render_rpc.interrupt();
-        action_render_rpc_interrupt.interrupt();
         reach_calib_rpc.interrupt();
         module_rpc.interrupt();
         table_calib_rpc.interrupt();
@@ -540,7 +537,6 @@ class GraspProcessorModule : public RFModule
         superq_rpc.close();
         point_cloud_rpc.close();
         action_render_rpc.close();
-        action_render_rpc_interrupt.close();
         reach_calib_rpc.close();
         module_rpc.close();
         table_calib_rpc.close();
@@ -1135,33 +1131,13 @@ class GraspProcessorModule : public RFModule
         if (command.get(0).toString() == "restart")
         {
             halt_requested = false;
-            if(action_render_rpc_interrupt.getOutputCount()>0)
-            {
-                Bottle command;
-                command.addString("reinstate");
-
-                Bottle rep;
-                action_render_rpc_interrupt.write(command, rep);
-            }
             reply.addVocab(Vocab::encode("ack"));
-            return true;
         }
 
         if (command.get(0).toString() == "halt")
         {
             halt_requested = true;
-
-            if(action_render_rpc_interrupt.getOutputCount()>0)
-            {
-                Bottle command;
-                command.addString("interrupt");
-
-                Bottle rep;
-                action_render_rpc_interrupt.write(command, rep);
-            }
-
             reply.addVocab(Vocab::encode("ack"));
-            return true;
         }
 
         reply.addVocab(Vocab::encode(cmd_success ? "ack":"nack"));
