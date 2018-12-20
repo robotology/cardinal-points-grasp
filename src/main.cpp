@@ -1132,12 +1132,14 @@ class GraspProcessorModule : public RFModule
         {
             halt_requested = false;
             reply.addVocab(Vocab::encode("ack"));
+            return true;
         }
 
         if (command.get(0).toString() == "halt")
         {
             halt_requested = true;
             reply.addVocab(Vocab::encode("ack"));
+            return true;
         }
 
         reply.addVocab(Vocab::encode(cmd_success ? "ack":"nack"));
@@ -1981,11 +1983,13 @@ class GraspProcessorModule : public RFModule
             {
                 yWarning() << "Couldn't retrieve fixed pose. Continuing with unchanged pose";
             }
-
-        //  if we are working with the simulator or there is no calib map, the pose doesn't need to be corrected
-        poseFixed = poseToFix;
-        yWarning() << "Connection to iolReachingCalibration not detected or calibration map not present: pose will not be changed";
-        return true;
+        }
+        else
+        {
+            //  if we are working with the simulator or there is no calib map, the pose doesn't need to be corrected
+            poseFixed = poseToFix;
+            yWarning() << "Connection to iolReachingCalibration not detected or calibration map not present: pose will not be changed";
+            return true;
         }
     }
 
