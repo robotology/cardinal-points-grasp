@@ -1442,7 +1442,7 @@ class GraspProcessorModule : public RFModule
          * 4 - palm cannot point up
          */
 
-        bool ok1, ok2, ok3, ok4;
+        bool ok1=true, ok2=true, ok3=false, ok4=false;
         for(int i=0 ; i<3 ; i++)
         {
             double object_size = 2*pose_ax_size[i];
