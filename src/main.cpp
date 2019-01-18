@@ -165,7 +165,8 @@ class GraspProcessorModule : public RFModule
 
     //  Robot specific parameters
     Vector planar_obstacle; // plane to avoid, typically a table (format (a b c d) following plane equation a.x+b.y+c.z+d=0)
-    Vector grasper_bounding_box; // bounding box of the grasper (x_min x_max y_min _y_max z_min z_max) expressed in the robot grasper frame used by the controller
+    Vector grasper_bounding_box_right; // bounding box of the right grasper (x_min x_max y_min _y_max z_min z_max) expressed in the robot right grasper frame used by the controller
+    Vector grasper_bounding_box_left; // bounding box of the left grasper (x_min x_max y_min _y_max z_min z_max) expressed in the robot left grasper frame used by the controller
     double obstacle_safety_distance; // minimal distance to respect between the grasper and the obstacle
     Vector min_object_size;
     Vector max_object_size;
@@ -342,19 +343,33 @@ class GraspProcessorModule : public RFModule
         }
         yInfo() << "Grabber specific approach for left arm loaded\n" << grasper_approach_parameters_left.toString();
 
-        list = rf.find("grasp_bounding_box").asList();
+        list = rf.find("grasp_bounding_box_right").asList();
         if(list)
         {
             if(list->size() == 6)
             {
-                for(int i=0 ; i<6 ; i++) grasper_bounding_box[i] = list->get(i).asDouble();
+                for(int i=0 ; i<6 ; i++) grasper_bounding_box_right[i] = list->get(i).asDouble();
             }
             else
             {
-                yError() << prettyError(__FUNCTION__, "Invalid grasp_bounding_box dimension in config. Should be 6.");
+                yError() << prettyError(__FUNCTION__, "Invalid grasp_bounding_box_right dimension in config. Should be 6.");
             }
         }
-        yInfo() << "Grabber bounding box loaded\n" << grasper_bounding_box.toString();
+        yInfo() << "Right grabber bounding box loaded\n" << grasper_bounding_box_right.toString();
+
+        list = rf.find("grasp_bounding_box_left").asList();
+        if(list)
+        {
+            if(list->size() == 6)
+            {
+                for(int i=0 ; i<6 ; i++) grasper_bounding_box_left[i] = list->get(i).asDouble();
+            }
+            else
+            {
+                yError() << prettyError(__FUNCTION__, "Invalid grasp_bounding_box_left dimension in config. Should be 6.");
+            }
+        }
+        yInfo() << "Left grabber bounding box loaded\n" << grasper_bounding_box_left.toString();
 
         list = rf.find("planar_obstacle").asList();
         if(list)
@@ -1680,6 +1695,16 @@ class GraspProcessorModule : public RFModule
 
         refined_grasp_pose_candidates.clear();
 
+        Vector grasper_bounding_box;
+        if(grasping_hand == WhichHand::HAND_RIGHT)
+        {
+            grasper_bounding_box = grasper_bounding_box_right;
+        }
+        else
+        {
+            grasper_bounding_box = grasper_bounding_box_left;
+        }
+
         int cnt = 0;
         for(size_t idx=0 ; idx<raw_grasp_pose_candidates.size() ; idx++)
         {
@@ -2129,7 +2154,7 @@ class GraspProcessorModule : public RFModule
 
 public:
     GraspProcessorModule(): closing(false), halt_requested(false),
-        planar_obstacle(4, 0.0), grasper_bounding_box(6, 0.0), obstacle_safety_distance(0.005),
+        planar_obstacle(4, 0.0), grasper_bounding_box_right(6, 0.0), grasper_bounding_box_left(6, 0.0), obstacle_safety_distance(0.005),
         grasping_hand(WhichHand::HAND_RIGHT), min_object_size(3, 0.0), max_object_size(3, std::numeric_limits<double>::max()),
         grasper_specific_transform_right(eye(4,4)), grasper_specific_transform_left(eye(4,4)),
         grasper_approach_parameters_right(4, 0.0), grasper_approach_parameters_left(4, 0.0),
