@@ -46,6 +46,9 @@ Once all the modules are running and connected (the code comes with a `yarpmanag
 
 All of these commands (at the moment) return an `ack` if the module reaches the end of the procedure, otherwise `nack`
 
+### Calibration 
+This module is made to interact with the Interactive Object Learning ([IOL](https://github.com/robotology/iol)) suite of modules. It interacts with 'iolReachingCalibration' to compensate for the kinematic offset between the stereo rig and the robot root reference frame. When [calibrating](http://robotology.github.io/iol/doxygen/doc/html/group__iolReachingCalibration.html) such module, __make sure that the 2D centroid of the detected object is on top of the object__, that is where the robot lands its hand for calibration. Otherwise, the calibration will consider points lower than the top end of the object, resulting in an undesired shift along the z-axis (robot reference frame) while executing any grasp.
+
 ### Command-line parameters
 - `--name moduleName`: start the module with the desired name (watch out for the port names!). 
 - `--sim`: if you need to use the module with the iCub-SIM.
