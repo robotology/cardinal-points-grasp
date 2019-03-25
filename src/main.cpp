@@ -1671,46 +1671,81 @@ class GraspProcessorModule : public RFModule
         Vector superq_axes_size = super_quadric_parameters.subVector(7,9);
         Vector superq_roundness = super_quadric_parameters.subVector(10,11);
 
-        //  get orientation of the superq in 3x3 rotation matrix form
-
+        // get orientation of the superq in 3x3 rotation matrix form
         Matrix superq_mat_orientation = axis2dcm(superq_XYZW_orientation).submatrix(0,2, 0,2);
 
-        //  columns of rotation matrix are superq axes direction
-        //  in root reference frame;
-        Vector sq_axis_x = superq_mat_orientation.getCol(0);
-        Vector sq_axis_y = superq_mat_orientation.getCol(1);
+        // get vertical axis of the superq
         Vector sq_axis_z = superq_mat_orientation.getCol(2);
 
-        //  create all possible candidates for pose evaluation
-        //  create search space for grasp axes x and y
-        vector<Vector> search_space_gx = {sq_axis_x, -1*sq_axis_x, sq_axis_y, -1*sq_axis_y};
-        vector<Vector> search_space_gy = {sq_axis_x, -1*sq_axis_x, sq_axis_y, -1*sq_axis_y, sq_axis_z, -1*sq_axis_z};
+        // Check number of levels of pseudo cardinal points, depending on superq roundness
 
-        //  create actual candidates
-        for (size_t idx = 0; idx < search_space_gx.size(); idx++)
+        int nb_pose_levels = 1;
+        if( (superq_roundness[1] > roundness_threshold) && (nb_cardinal_levels > 1) )
         {
-            Vector gx = search_space_gx[idx];
-            //  for each candidate gx axis, try all gy possibilities
-            for (size_t jdx = 0; jdx < search_space_gy.size(); jdx++)
+            nb_pose_levels = nb_cardinal_levels;
+        }
+
+        int nb_pseudo_pose = pow(2, nb_pose_levels+1);
+        double delta_angle = 2*M_PI / (double)nb_pseudo_pose;
+
+        // Generate grasp candidates
+
+        Matrix candidate_pose(4,4);
+        candidate_pose(3,3) = 1;
+
+        Vector o_top(4,0.0);
+        o_top[0] = 1.0;
+        o_top[3] = M_PI;
+        Matrix R_top = superq_mat_orientation * axis2dcm(o_top).submatrix(0,2, 0,2);
+        Vector T_top = superq_center + superq_axes_size[2] * sq_axis_z;
+
+        Matrix R_bot = superq_mat_orientation;
+        Vector T_bot = superq_center - superq_axes_size[2] * sq_axis_z;
+
+        Vector o_side_spec(4,0.0);
+        o_side_spec[1] = 1.0;
+        o_side_spec[3] = -M_PI / 2.0;
+        Matrix R_side_spec = axis2dcm(o_side_spec).submatrix(0,2, 0,2);
+
+        for(double angle=0 ; angle<2*M_PI ; angle+=delta_angle)
+        {
+            Vector o_cardinal(4,0.0);
+            o_cardinal[2] = 1.0;
+            o_cardinal[3] = angle;
+            Matrix R_cardinal = axis2dcm(o_cardinal).submatrix(0,2, 0,2);;
+
+            // Top
+            candidate_pose.setSubcol(T_top, 0,3);
+            candidate_pose.setSubmatrix(R_top * R_cardinal, 0, 0);
+            raw_grasp_pose_candidates.push_back(candidate_pose);
+
+            // Bottom
+            candidate_pose.setSubcol(T_bot, 0,3);
+            candidate_pose.setSubmatrix(R_bot * R_cardinal, 0, 0);
+            raw_grasp_pose_candidates.push_back(candidate_pose);
+
+            // Sides
+            Vector T_side = R_cardinal.subcol(0,0, 3);
+
+            double tx=pow(abs(T_side[0]/superq_axes_size[0]), 2.0/superq_roundness[1]);
+            double ty=pow(abs(T_side[1]/superq_axes_size[1]), 2.0/superq_roundness[1]);
+            double tz=pow(abs(T_side[2]/superq_axes_size[2]), 2.0/superq_roundness[0]);
+            double F=pow(pow(tx+ty, superq_roundness[1]/superq_roundness[0])+tz, superq_roundness[0]/2.0);
+
+            T_side = 1.0 / F * T_side;
+
+            candidate_pose.setSubcol(superq_center + superq_mat_orientation * T_side, 0,3);
+
+            for(int i=0 ; i<4 ; i++)
             {
-                //  create a gx, gy orthogonal couple
-                Vector gy = search_space_gy[jdx];
-                if (dot(gx, gy)*dot(gx, gy) < 0.0001)
-                {
-                    Matrix candidate_pose(4,4);
-                    candidate_pose(3,3) = 1;
-                    //  create gz with cross product
-                    //  create candidate entry
-                    Vector gz = cross(gx, gy);
+                Vector o_hand(4,0.0);
+                o_hand[2] = 1.0;
+                o_hand[3] = i * M_PI / 2.0;
+                Matrix R_hand = axis2dcm(o_hand).submatrix(0,2, 0,2);
 
-                    candidate_pose.setSubcol(gx, 0,0);
-                    candidate_pose.setSubcol(gy, 0,1);
-                    candidate_pose.setSubcol(gz, 0,2);
-                    double s = (grasping_hand == WhichHand::HAND_RIGHT ? -1.0 : 1.0);
-                    candidate_pose.setSubcol(superq_center + s * superq_axes_size(3 - idx/2 - jdx/2) / norm(gz) * gz, 0,3);
+                candidate_pose.setSubmatrix(superq_mat_orientation * R_cardinal * R_side_spec * R_hand, 0, 0);
 
-                    raw_grasp_pose_candidates.push_back(candidate_pose);
-                }
+                raw_grasp_pose_candidates.push_back(candidate_pose);
             }
         }
     }
