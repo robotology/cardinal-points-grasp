@@ -501,7 +501,8 @@ class GraspProcessorModule : public RFModule
         vtk_renderer->SetActiveCamera(vtk_camera);
 
         //  prepare the pose actors vector
-        for (size_t idx = 0; idx < 25; idx++)
+
+        for (size_t idx = 0; idx < 6*pow(2, nb_cardinal_levels+1); idx++)
         {
             vtkSmartPointer<vtkAxesActor> ax_actor = vtkSmartPointer<vtkAxesActor>::New();
             vtkSmartPointer<vtkCaptionActor2D> cap_actor = vtkSmartPointer<vtkCaptionActor2D>::New();
