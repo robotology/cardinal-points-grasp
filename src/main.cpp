@@ -178,6 +178,10 @@ class GraspProcessorModule : public RFModule
     // Filtering constants
     double position_error_threshold;
 
+    // Candidate pose generation parameters
+    double roundness_threshold; // threshold on the roundness of the object to generate pseudo cardinal poses
+    int nb_cardinal_levels; // number of levels of pseudo cardinal poses generated (1 or lower = normal)
+
     //  visualization parameters
     int x, y, h, w;
 
@@ -395,6 +399,16 @@ class GraspProcessorModule : public RFModule
 
         position_error_threshold = rf.check("position_error_threshold", Value(0.01)).asDouble();
         yInfo() << "Position error threshold loaded=" << position_error_threshold;
+
+        roundness_threshold = rf.check("roundness_threshold", Value(1.0)).asDouble();
+        yInfo() << "Roundness threshold loaded=" << roundness_threshold;
+
+        nb_cardinal_levels = rf.check("nb_cardinal_levels", Value(1)).asInt();
+        if(nb_cardinal_levels < 1)
+        {
+            nb_cardinal_levels = 1;
+        }
+        yInfo() << "Number of cardinal point levels loaded=" << nb_cardinal_levels;
 
         //  open the necessary ports
         superq_rpc.open("/" + moduleName + "/superquadricRetrieve:rpc");
