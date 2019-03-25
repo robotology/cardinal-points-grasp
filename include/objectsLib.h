@@ -110,6 +110,8 @@ public:
     /****************************************************************/
     yarp::sig::Vector getOrientationXYZW();
 
+    /****************************************************************/
+    yarp::sig::Vector getRoundness();
 };
 
 class GraspPose

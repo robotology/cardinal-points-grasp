@@ -220,6 +220,20 @@ Vector Superquadric::getOrientationXYZW()
 }
 
 /****************************************************************/
+Vector Superquadric::getRoundness()
+{
+    //  get the superquadric roundness parameters and return as a yarp Vector
+    Vector roundness_vec(2);
+
+    roundness_vec[0] = vtk_superquadric->GetPhiRoundness();
+    roundness_vec[1] = vtk_superquadric->GetThetaRoundness();
+
+    //yDebug() << "Superquadric processor: roundness is " << roundness_vec.toString();
+
+    return roundness_vec;
+}
+
+/****************************************************************/
 GraspPose::GraspPose() : pose_cost_function(2), pose_transform(4,4), pose_rotation(3,3), pose_translation(3), pose_ax_size(3)
 {
     pose_cost_function.zero();
