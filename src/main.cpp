@@ -1476,9 +1476,10 @@ class GraspProcessorModule : public RFModule
          * 2 - object small enough for grasping
          * 3 - thumb cannot point down
          * 4 - palm cannot point up
+         * 5 - fingers cannot point up
          */
 
-        bool ok1=true, ok2=true, ok3=false, ok4=false;
+        bool ok1=true, ok2=true, ok3=false, ok4=false, ok5=false;
         for(int i=0 ; i<3 ; i++)
         {
             double object_size = 2*pose_ax_size[i];
@@ -1486,19 +1487,30 @@ class GraspProcessorModule : public RFModule
             ok2 &= (object_size < max_object_size[i]);
         }
 
-        ok3 = dot(pose_mat_rotation.getCol(1), root_z_axis) <= 0.1;
+        Matrix hand_mat_rotation;
+        if(grasping_hand == WhichHand::HAND_RIGHT)
+        {
+            hand_mat_rotation = pose_mat_rotation * grasper_specific_transform_right.submatrix(0,2, 0,2);
+        }
+        else
+        {
+            hand_mat_rotation = pose_mat_rotation * grasper_specific_transform_left.submatrix(0,2, 0,2);
+        }
+
+        ok3 = dot(hand_mat_rotation.getCol(1), root_z_axis) <= 0.1;
         if (grasping_hand == WhichHand::HAND_RIGHT)
         {
             //  ok if hand z axis points downward
-            ok4 = (dot(pose_mat_rotation.getCol(2), root_z_axis) <= 0.1);
+            ok4 = (dot(hand_mat_rotation.getCol(2), root_z_axis) <= 0.1);
         }
         else
         {
             //  ok if hand z axis points upwards
-            ok4 = (dot(pose_mat_rotation.getCol(2), root_z_axis) >= -0.1);
+            ok4 = (dot(hand_mat_rotation.getCol(2), root_z_axis) >= -0.1);
         }
+        ok5 = dot(hand_mat_rotation.getCol(0), root_z_axis) <= 0.1;
 
-        return (ok1 && ok2 && ok3 && ok4);
+        return (ok1 && ok2 && ok3 && ok4 && ok5);
     }
 
     /****************************************************************/
