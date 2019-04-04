@@ -1,11 +1,11 @@
-/******************************************************************************
- *                                                                            *
- * Copyright (C) 2018 Fondazione Istituto Italiano di Tecnologia (IIT)        *
- * All Rights Reserved.                                                       *
- *                                                                            *
- ******************************************************************************/
+/*
+ * Copyright (C) 2019 Istituto Italiano di Tecnologia (IIT)
+ *
+ * This software may be modified and distributed under the terms of the
+ * GPL-2+ license. See the accompanying LICENSE file for details.
+ */
 
-/**
+/*
  * @file objectsLib.h
  * @authors: Fabrizio Bottarel <fabrizio.bottarel@iit.it>
  */
