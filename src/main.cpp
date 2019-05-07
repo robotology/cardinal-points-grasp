@@ -1243,7 +1243,7 @@ class GraspProcessorModule : public RFModule
         superq_params_sorted(7) = superq_params(2);
 
         Vector axisangle = dcm2axis(rpy2dcm(superq_params.subVector(3,5) * M_PI/180.0));
-        superq_params_sorted(8) = axisangle(3);
+        superq_params_sorted(8) = axisangle(3) * 180.0/M_PI;
         superq_params_sorted(9) = axisangle(0);
         superq_params_sorted(10) = axisangle(1);
         superq_params_sorted(11) = axisangle(2);
@@ -1401,6 +1401,9 @@ class GraspProcessorModule : public RFModule
         //  refresh superquadric with parameters
         Bottle cmd, reply;
 
+        cmd.clear();
+        reply.clear();
+
         if(superq_rpc.getOutputCount()<1)
         {
             yError() << prettyError( __FUNCTION__,  "requestRefreshSuperquadric: no connection to superquadric module");
@@ -1417,9 +1420,23 @@ class GraspProcessorModule : public RFModule
 
         cmd.addInt(0);
 
-        Vector superq_parameters;
+        Vector superq_parameters(11,0.0);
 
-        superq_parameters=superq_rpc.write(cmd, reply);
+        superq_rpc.write(cmd, reply);
+
+        Bottle *superq = reply.get(0).asList();
+
+        yDebug() << "superq bottle " << reply.toString();
+
+
+        for (size_t i = 0; i < superq->size(); i++)
+        {
+            superq_parameters[i] = superq->get(i).asDouble();
+
+            yDebug() << superq->get(i).asDouble();
+        }
+
+        yDebug() << "superq parameters " << superq_parameters.toString();
 
         if (superq_parameters.size() == 11)
         {

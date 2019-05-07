@@ -1,5 +1,5 @@
 <application>
-    <name>Grasp pose processor</name>
+    <name>Grasp pose processor (Localize) </name>
 
     <dependencies>
         <port>/pointCloudRead/rpc</port>
@@ -30,7 +30,7 @@
 
     <connection>
         <from>/graspProcessor/superquadricRetrieve:rpc</from>
-        <to>/localize-superquadric/points:rpc</to>
+        <to>/localize-superquadric/service:rpc</to>
         <protocol>fast_tcp</protocol>
     </connection>
 
@@ -77,15 +77,40 @@
   </connection>
 
   <connection>
-      <from>/pointCloudRead/segmrpc</from>
-      <to>/lbpExtract/rpc:i</to>
-      <protocol>fast_tcp</protocol>
-  </connection>
-
-  <connection>
       <from>/iolStateMachineHandler/motor_grasp:rpc</from>
       <to>/graspProcessor/cmd:rpc</to>
       <protocol>fast_tcp</protocol>
   </connection>
+
+  <connection>
+        <from>/icub/camcalib/left/out</from>
+        <to>/instanceSegmenter/RGBimage:i</to>
+        <protocol>fast_tcp</protocol>
+    </connection>
+
+    <connection>
+        <from>/instanceSegmenter/bboxes:o</from>
+        <to>/iolStateMachineHandler/blobs:i</to>
+        <protocol>fast_tcp</protocol>
+    </connection>
+
+    <connection>
+        <from>/instanceSegmenter/RGBimage:o</from>
+        <to>/iolViewer/lbpSegmented</to>
+        <protocol>fast_tcp</protocol>
+    </connection>
+
+    <connection>
+        <from>/pointCloudRead/segmrpc</from>
+        <to>/instanceSegmenter/rpc</to>
+        <protocol>fast_tcp</protocol>
+    </connection>
+    
+    <connection>
+        <from>/localize-superquadric/opc:rpc</from>
+        <to>/memory/rpc</to>
+        <protocol>fast_tcp</protocol>
+    </connection>
+    
 
 </application>
