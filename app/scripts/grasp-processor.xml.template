@@ -18,7 +18,7 @@
     </module>
 
     <module>
-        <name>find-superquadric</name>
+        <name>localize-superquadrics</name>
 	    <parameters>--random-sample 0.2 --remove-outliers "(0.01 10)"</parameters>
         <node>localhost</node>
     </module>
@@ -30,7 +30,7 @@
 
     <connection>
         <from>/graspProcessor/superquadricRetrieve:rpc</from>
-        <to>/find-superquadric/points:rpc</to>
+        <to>/localize-superquadric/points:rpc</to>
         <protocol>fast_tcp</protocol>
     </connection>
 
