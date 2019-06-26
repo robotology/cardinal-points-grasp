@@ -631,8 +631,57 @@ class GraspProcessorModule : public RFModule
             {
                 if (requestRefreshSuperquadric(pc, obj))
                 {
-                    cmd_success = computeGraspPose(grasp_pose);
+                    cmd_success = computeGraspPose(grasp_pose, false);
                     yInfo() << "Pose retrieved: " << grasp_pose.toString();
+                }
+            }
+        }
+
+        if (command.get(0).toString() == "mobile_grasp_pose")
+        {
+            //  normal operation
+            if (command.size() == 3)
+            {
+                obj = command.get(1).toString();
+                hand = command.get(2).toString();
+                if (hand == "right")
+                {
+                    grasping_hand = WhichHand::HAND_RIGHT;
+                }
+                else if (hand == "left")
+                {
+                    grasping_hand = WhichHand::HAND_LEFT;
+                }
+                else
+                {
+                    reply.addVocab(Vocab::encode("nack"));
+                    return true;
+                }
+
+            }
+            else
+            {
+                reply.addVocab(Vocab::encode("nack"));
+                return true;
+            }
+            PointCloud<DataXYZRGBA> pc;
+            yDebug() << "Requested object: " << obj;
+            if (requestRefreshPointCloud(pc, obj, fixate_object))
+            {
+                if (requestRefreshSuperquadric(pc, obj))
+                {
+                    if(computeGraspPose(grasp_pose, true))
+                    {
+                        yInfo() << "Pose retrieved: " << grasp_pose.toString();
+                        reply.addVocab(Vocab::encode("ack"));
+                        reply.addList().read(grasp_pose);
+                        return true;
+                    }
+                    else
+                    {
+                        reply.addVocab(Vocab::encode("nack"));
+                        return true;
+                    }
                 }
             }
         }
@@ -714,7 +763,7 @@ class GraspProcessorModule : public RFModule
                 return true;
             }
 
-            if (!computeGraspPose(grasp_pose))
+            if (!computeGraspPose(grasp_pose, false))
             {
                 yError() << prettyError( __FUNCTION__,  "Could not compute grasping pose.");
                 reply.addVocab(Vocab::encode("nack"));
@@ -835,7 +884,7 @@ class GraspProcessorModule : public RFModule
                 return true;
             }
 
-            if (!computeGraspPose(grasp_pose))
+            if (!computeGraspPose(grasp_pose, false))
             {
                 yError() << prettyError( __FUNCTION__,  "Could not compute grasping pose.");
                 reply.addVocab(Vocab::encode("nack"));
@@ -945,7 +994,7 @@ class GraspProcessorModule : public RFModule
                 refreshPointCloud(pc);
                 if (requestRefreshSuperquadric(pc, obj))
                 {
-                    cmd_success = computeGraspPose(grasp_pose);
+                    cmd_success = computeGraspPose(grasp_pose, false);
                     yInfo() << "Pose retrieved: " << grasp_pose.toString();
                 }
             }
@@ -1136,7 +1185,7 @@ class GraspProcessorModule : public RFModule
 
                 int best_grasp_pose_index;
                 vector<Vector> costs;
-                if(this->getBestCandidatePose(super_quadric_parameters, grasp_pose_candidates, best_grasp_pose_index, costs))
+                if(this->getBestCandidatePose(super_quadric_parameters, grasp_pose_candidates, best_grasp_pose_index, costs, false))
                 {
                     Vector best_pose(7, 0.0);
                     best_pose.setSubvector(0, grasp_pose_candidates[best_grasp_pose_index].subcol(0,3,3));
@@ -1541,7 +1590,7 @@ class GraspProcessorModule : public RFModule
     }
 
     /****************************************************************/
-    bool getPoseCostFunction(const Vector &super_quadric_parameters, const Matrix &candidate_pose, Vector &cost)
+    bool getPoseCostFunction(const Vector &super_quadric_parameters, const Matrix &candidate_pose, Vector &cost, bool mobile_base)
     {
         cost.resize(2, std::numeric_limits<double>::max());
 
@@ -1560,6 +1609,12 @@ class GraspProcessorModule : public RFModule
 
         if((robot == "icubSim") || (robot == "icub"))
         {
+            if(mobile_base)
+            {
+                yError() << prettyError( __FUNCTION__,  "getPoseCostFunction: mobile base not available with iCub");
+                return false ;
+            }
+
             if ((grasping_hand == WhichHand::HAND_LEFT) && left_arm_client.isValid())
             {
                 left_arm_client.view(icart);
@@ -1602,16 +1657,20 @@ class GraspProcessorModule : public RFModule
             }
 
             Bottle cmd, reply;
-            cmd.addVocab(Vocab::encode("ask"));
+            if(mobile_base) cmd.addVocab(Vocab::encode("askMobile"));
+            else cmd.addVocab(Vocab::encode("ask"));
             Bottle &subcmd = cmd.addList();
             for(int i=0 ; i<3 ; i++) subcmd.addDouble(x_d[i]);
             for(int i=0 ; i<4 ; i++) subcmd.addDouble(o_d[i]);
+
             if(grasping_hand == WhichHand::HAND_LEFT)
             {
+                if(mobile_base) cmd.addList().read(grasper_approach_parameters_left);
                 cmd.addString("left");
             }
             else if(grasping_hand == WhichHand::HAND_RIGHT)
             {
+                if(mobile_base) cmd.addList().read(grasper_approach_parameters_right);
                 cmd.addString("right");
             }
             action_render_rpc.write(cmd, reply);
@@ -1624,8 +1683,19 @@ class GraspProcessorModule : public RFModule
 
             if(reply.get(0).asVocab() != Vocab::encode("ack"))
             {
-                yError() << prettyError( __FUNCTION__,  "getPoseCostFunction: invalid reply from action rendering module:") << reply.toString();
-                return false;
+                if(mobile_base)
+                {
+                    yInfo() << prettyError( __FUNCTION__,  "getPoseCostFunction: cost for mobile cost failed, invalid reply from action rendering module:") << reply.toString();
+
+                    cost[0] = std::numeric_limits<double>::max();
+                    cost[1] = std::numeric_limits<double>::max();
+                    return true;
+                }
+                else
+                {
+                    yError() << prettyError( __FUNCTION__,  "getPoseCostFunction: invalid reply from action rendering module:") << reply.toString();
+                    return false;
+                }
             }
 
             if(reply.size()<3)
@@ -1683,9 +1753,16 @@ class GraspProcessorModule : public RFModule
             pose_ax_size[i] = sqrt(pose_ax_size[i]);
         }
 
-        cost[1] = norm(orientation_error_vector.subVector(0,2)) * fabs(sin(orientation_error_vector(3)));
+        if(mobile_base)
+        {
+            cost[1] = pow( fabs(q_d_hat[0]-super_quadric_parameters[0]), 2) + pow( fabs(q_d_hat[1]-super_quadric_parameters[1]), 2);
+        }
+        else
+        {
+            cost[1] = norm(orientation_error_vector.subVector(0,2)) * fabs(sin(orientation_error_vector(3)));
 
-        cost[1] = 0.5*cost[1] + 0.5*(1-pose_ax_size[1]/yarp::math::findMax(pose_ax_size));
+            cost[1] = 0.5*cost[1] + 0.5*(1-pose_ax_size[1]/yarp::math::findMax(pose_ax_size));
+        }
 
         yDebug() << "Cost function: " << cost.toString();
 
@@ -2000,7 +2077,7 @@ class GraspProcessorModule : public RFModule
     }
 
     /****************************************************************/
-    bool getBestCandidatePose(const Vector &super_quadric_parameters, const vector<Matrix> &grasp_pose_candidates, int &best_pose_index, vector<Vector> &costs)
+    bool getBestCandidatePose(const Vector &super_quadric_parameters, const vector<Matrix> &grasp_pose_candidates, int &best_pose_index, vector<Vector> &costs, bool mobile_base)
     {
         if (super_quadric_parameters.size() < 10)
         {
@@ -2015,7 +2092,7 @@ class GraspProcessorModule : public RFModule
         {
             if((grasp_pose_candidates[i].rows()==4) || (grasp_pose_candidates[i].cols()==4))
             {
-                if(!(this->getPoseCostFunction(super_quadric_parameters, grasp_pose_candidates[i], costs[i])))
+                if(!(this->getPoseCostFunction(super_quadric_parameters, grasp_pose_candidates[i], costs[i], mobile_base)))
                 {
                     yError() << prettyError( __FUNCTION__,  "getBestCandidatePose: could not compute grasping pose cost function");
                     return false;
@@ -2130,7 +2207,7 @@ class GraspProcessorModule : public RFModule
     }
 
     /****************************************************************/
-    bool computeGraspPose(Vector &pose)
+    bool computeGraspPose(Vector &pose, bool mobile_base)
     {
         //  execute the pose computation pipeline
         bool success = false;
@@ -2155,7 +2232,7 @@ class GraspProcessorModule : public RFModule
 
         int best_grasp_pose_index;
         vector<Vector> costs;
-        if(getBestCandidatePose(superq_parameters, grasp_pose_candidates, best_grasp_pose_index, costs))
+        if(getBestCandidatePose(superq_parameters, grasp_pose_candidates, best_grasp_pose_index, costs, mobile_base))
         {
             Vector best_pose(7, 0.0);
             best_pose.setSubvector(0, grasp_pose_candidates[best_grasp_pose_index].subcol(0,3,3));
