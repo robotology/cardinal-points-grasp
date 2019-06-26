@@ -1,11 +1,11 @@
-/******************************************************************************
- *                                                                            *
- * Copyright (C) 2018 Fondazione Istituto Italiano di Tecnologia (IIT)        *
- * All Rights Reserved.                                                       *
- *                                                                            *
- ******************************************************************************/
+/*
+ * Copyright (C) 2019 Istituto Italiano di Tecnologia (IIT)
+ *
+ * This software may be modified and distributed under the terms of the
+ * GPL-2+ license. See the accompanying LICENSE file for details.
+ */
 
-/**
+/*
  * @file main.cpp
  * @authors: Fabrizio Bottarel <fabrizio.bottarel@iit.it>
  */
@@ -629,7 +629,7 @@ class GraspProcessorModule : public RFModule
             yDebug() << "Requested object: " << obj;
             if (requestRefreshPointCloud(pc, obj, fixate_object))
             {
-                if (requestRefreshSuperquadric(pc))
+                if (requestRefreshSuperquadric(pc, obj))
                 {
                     cmd_success = computeGraspPose(grasp_pose);
                     yInfo() << "Pose retrieved: " << grasp_pose.toString();
@@ -700,7 +700,7 @@ class GraspProcessorModule : public RFModule
                 return true;
             }
 
-            if (!requestRefreshSuperquadric(pc))
+            if (!requestRefreshSuperquadric(pc, obj))
             {
                 yError() << prettyError( __FUNCTION__,  "Could not refresh superquadric.");
                 reply.addVocab(Vocab::encode("nack"));
@@ -821,7 +821,7 @@ class GraspProcessorModule : public RFModule
                 return true;
             }
 
-            if (!requestRefreshSuperquadric(pc))
+            if (!requestRefreshSuperquadric(pc, obj))
             {
                 yError() << prettyError( __FUNCTION__,  "Could not refresh superquadric.");
                 reply.addVocab(Vocab::encode("nack"));
@@ -943,7 +943,7 @@ class GraspProcessorModule : public RFModule
             if (pc.size() > 0)
             {
                 refreshPointCloud(pc);
-                if (requestRefreshSuperquadric(pc))
+                if (requestRefreshSuperquadric(pc, obj))
                 {
                     cmd_success = computeGraspPose(grasp_pose);
                     yInfo() << "Pose retrieved: " << grasp_pose.toString();
@@ -1248,18 +1248,20 @@ class GraspProcessorModule : public RFModule
 
         Vector superq_params_sorted(12, 0.0);
 
-        superq_params_sorted(0) = superq_params(4);
-        superq_params_sorted(1) = superq_params(5);
-        superq_params_sorted(2) = superq_params(6);
-        superq_params_sorted(3) = superq_params(7);
-        superq_params_sorted(4) = superq_params(8);
+        superq_params_sorted(0) = superq_params(6);
+        superq_params_sorted(1) = superq_params(7);
+        superq_params_sorted(2) = superq_params(8);
+        superq_params_sorted(3) = superq_params(9);
+        superq_params_sorted(4) = superq_params(10);
         superq_params_sorted(5) = superq_params(0);
         superq_params_sorted(6) = superq_params(1);
         superq_params_sorted(7) = superq_params(2);
-        superq_params_sorted(8) = superq_params(3);
-        superq_params_sorted(9) = 0.0;
-        superq_params_sorted(10) = 0.0;
-        superq_params_sorted(11) = 1.0;
+
+        Vector axisangle = dcm2axis(rpy2dcm(superq_params.subVector(3,5) * M_PI/180.0));
+        superq_params_sorted(8) = axisangle(3) * 180.0/M_PI;
+        superq_params_sorted(9) = axisangle(0);
+        superq_params_sorted(10) = axisangle(1);
+        superq_params_sorted(11) = axisangle(2);
 
         LockGuard lg(mutex);
 
@@ -1406,14 +1408,16 @@ class GraspProcessorModule : public RFModule
     }
 
     /****************************************************************/
-    bool requestRefreshSuperquadric(PointCloud<DataXYZRGBA> &point_cloud)
+    bool requestRefreshSuperquadric(PointCloud<DataXYZRGBA> &point_cloud, string &obj)
     {
         //  query find-superquadric via rpc for the superquadric
         //  command: (point cloud)
         //  parse the reply (center-x center-y center-z angle size-x size-y size-z epsilon-1 epsilon-2)
         //  refresh superquadric with parameters
-        Bottle sq_reply;
-        sq_reply.clear();
+        Bottle cmd, reply;
+
+        cmd.clear();
+        reply.clear();
 
         if(superq_rpc.getOutputCount()<1)
         {
@@ -1421,12 +1425,35 @@ class GraspProcessorModule : public RFModule
             return false;
         }
 
-        superq_rpc.write(point_cloud, sq_reply);
+        cmd.clear();
+        cmd.addString("localize_superq");
+        cmd.addString(obj);
 
-        Vector superq_parameters;
-        sq_reply.write(superq_parameters);
+        Bottle &list_points=cmd.addList();
 
-        if (superq_parameters.size() == 9)
+        list_points = point_cloud.toBottle();
+
+        cmd.addInt(0);
+
+        Vector superq_parameters(11,0.0);
+
+        superq_rpc.write(cmd, reply);
+
+        Bottle *superq = reply.get(0).asList();
+
+        yDebug() << "superq bottle " << reply.toString();
+
+
+        for (size_t i = 0; i < superq->size(); i++)
+        {
+            superq_parameters[i] = superq->get(i).asDouble();
+
+            yDebug() << superq->get(i).asDouble();
+        }
+
+        yDebug() << "superq parameters " << superq_parameters.toString();
+
+        if (superq_parameters.size() == 11)
         {
             refreshSuperquadric(superq_parameters);
             return true;
