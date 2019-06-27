@@ -1399,13 +1399,16 @@ class GraspProcessorModule : public RFModule
     bool requestRefreshPointCloudFromPosition(PointCloud<DataXYZRGBA> &point_cloud, const Vector &position, const bool &fixate_object = false)
     {
         //  query point-cloud-read via rpc for the point cloud
-        //  command: get_point_cloud_from_3D_position pos_x pos_y pos_z
+        // if input is 3D, position is considered 3D (meters)
+        // command: get_point_cloud_from_3D_position pos_x pos_y pos_z
+        // if input is 2D, position is considered 2D (pixels in image frame)
+        // command: get_point_cloud_from_image_position pos_u pos_v
         //  put point cloud into container, return true if operation was ok
         //  or call refreshpointcloud
 
-        if(position.size() < 3)
+        if( (position.size() != 3) && (position.size() != 2) )
         {
-            yError() << prettyError( __FUNCTION__,  "Invalid position vector dimension. Should be 3.");
+            yError() << prettyError( __FUNCTION__,  "Invalid position vector dimension. Should be 3 or 2.");
             return false;
         }
 
@@ -1422,11 +1425,22 @@ class GraspProcessorModule : public RFModule
                 return false;
             }
 
-            cmd_request.addVocab(Vocab::encode("look"));
-            Bottle &subcmd_request = cmd_request.addList();
-            subcmd_request.addString("cartesian");
-            for(int i=0 ; i<3 ; i++) subcmd_request.addDouble(position[i]);
-            cmd_request.addString("wait");
+            if(position.size() == 3)
+            {
+                cmd_request.addVocab(Vocab::encode("look"));
+                Bottle &subcmd_request = cmd_request.addList();
+                subcmd_request.addString("cartesian");
+                for(int i=0 ; i<3 ; i++) subcmd_request.addDouble(position[i]);
+                cmd_request.addString("wait");
+            }
+            else
+            {
+                cmd_request.addVocab(Vocab::encode("look"));
+                Bottle &subcmd_request = cmd_request.addList();
+                subcmd_request.addString("image");
+                for(int i=0 ; i<2 ; i++) subcmd_request.addDouble(position[i]);
+                cmd_request.addString("wait");
+            }
 
             action_render_rpc.write(cmd_request, cmd_reply);
             if (cmd_reply.get(0).asVocab() != Vocab::encode("ack"))
@@ -1440,8 +1454,16 @@ class GraspProcessorModule : public RFModule
         cmd_request.clear();
         cmd_reply.clear();
 
-        cmd_request.addString("get_point_cloud_from_3D_position");
-        for(int i=0 ; i<3 ; i++) cmd_request.addDouble(position[i]);
+        if(position.size() == 3)
+        {
+            cmd_request.addString("get_point_cloud_from_3D_position");
+            for(int i=0 ; i<3 ; i++) cmd_request.addDouble(position[i]);
+        }
+        else
+        {
+            cmd_request.addString("get_point_cloud_from_image_position");
+            for(int i=0 ; i<2 ; i++) cmd_request.addDouble(position[i]);
+        }
 
         if(point_cloud_rpc.getOutputCount()<1)
         {
