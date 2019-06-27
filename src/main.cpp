@@ -2282,7 +2282,22 @@ class GraspProcessorModule : public RFModule
 
                 pose_candidates[idx]->pose_cost_function = costs[idx];
                 stringstream ss;
-                ss << fixed << setprecision(3) << pose_candidates[idx]->pose_cost_function(0) << "_" << fixed << setprecision(3) << pose_candidates[idx]->pose_cost_function(1);
+                if(pose_candidates[idx]->pose_cost_function(0)==std::numeric_limits<double>::max())
+                {
+                    ss << "max_";
+                }
+                else
+                {
+                    ss << fixed << setprecision(3) << pose_candidates[idx]->pose_cost_function(0) << "_";
+                }
+                if(pose_candidates[idx]->pose_cost_function(1)==std::numeric_limits<double>::max())
+                {
+                    ss << "max";
+                }
+                else
+                {
+                    ss << fixed << setprecision(3) << pose_candidates[idx]->pose_cost_function(1);
+                }
                 pose_candidates[idx]->setvtkActorCaption(ss.str());
 
                 pose_captions[idx]->VisibilityOn();
