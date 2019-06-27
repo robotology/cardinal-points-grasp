@@ -639,11 +639,23 @@ class GraspProcessorModule : public RFModule
 
         if (command.get(0).toString() == "mobile_grasp_pose")
         {
+            Vector position;
             //  normal operation
-            if (command.size() == 3)
+            if (command.size() == 4)
             {
                 obj = command.get(1).toString();
-                hand = command.get(2).toString();
+                Bottle *position_b = command.get(2).asList();
+                if(!position_b)
+                {
+                    yError() << prettyError( __FUNCTION__,  "Invalid second parameter, should be a vector.");
+                    reply.addVocab(Vocab::encode("nack"));
+                    return true;
+                }
+                for(int i=0; i<position_b->size(); i++)
+                {
+                    position.push_back(position_b->get(i).asDouble());
+                }
+                hand = command.get(3).toString();
                 if (hand == "right")
                 {
                     grasping_hand = WhichHand::HAND_RIGHT;
@@ -654,6 +666,7 @@ class GraspProcessorModule : public RFModule
                 }
                 else
                 {
+                    yError() << prettyError( __FUNCTION__,  "Invalid hand parameter, should be either \"right\" or \"left\".");
                     reply.addVocab(Vocab::encode("nack"));
                     return true;
                 }
@@ -665,8 +678,8 @@ class GraspProcessorModule : public RFModule
                 return true;
             }
             PointCloud<DataXYZRGBA> pc;
-            yDebug() << "Requested object: " << obj;
-            if (requestRefreshPointCloud(pc, obj, fixate_object))
+            yDebug() << "Requested object" << obj << "at position (" << position.toString() << ") with" << hand << "hand" ;
+            if (requestRefreshPointCloudFromPosition(pc, position, false))
             {
                 if (requestRefreshSuperquadric(pc, obj))
                 {
