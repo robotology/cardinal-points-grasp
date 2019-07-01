@@ -1585,9 +1585,8 @@ class GraspProcessorModule : public RFModule
          * Filtering parameters:
          * 1 - object large enough for grasping
          * 2 - object small enough for grasping
-         * 3 - thumb cannot point down
-         * 4 - palm cannot point up
-         * 5 - fingers cannot point up
+         * 3 - thumb cannot point down (with 10 degrees margin)
+         * 4 - grasping from top(with 10 degrees margin)
          */
 
         bool ok1=true, ok2=true, ok3=false, ok4=false, ok5=false;
@@ -1608,20 +1607,11 @@ class GraspProcessorModule : public RFModule
             hand_mat_rotation = pose_mat_rotation * grasper_specific_transform_left.submatrix(0,2, 0,2);
         }
 
-        ok3 = dot(hand_mat_rotation.getCol(1), root_z_axis) <= 0.1;
-        if (grasping_hand == WhichHand::HAND_RIGHT)
-        {
-            //  ok if hand z axis points downward
-            ok4 = (dot(hand_mat_rotation.getCol(2), root_z_axis) <= 0.1);
-        }
-        else
-        {
-            //  ok if hand z axis points upwards
-            ok4 = (dot(hand_mat_rotation.getCol(2), root_z_axis) >= -0.1);
-        }
-        ok5 = dot(hand_mat_rotation.getCol(0), root_z_axis) <= 0.1;
+        ok3 = dot(hand_mat_rotation.getCol(1), root_z_axis) <= sin(M_PI/180.0*10);
 
-        return (ok1 && ok2 && ok3 && ok4 && ok5);
+        ok4 = dot(pose_mat_rotation.getCol(2), root_z_axis) <= sin(M_PI/180.0*10);
+
+        return (ok1 && ok2 && ok3 && ok4);
     }
 
     /****************************************************************/
