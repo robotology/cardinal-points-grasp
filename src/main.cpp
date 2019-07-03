@@ -662,7 +662,7 @@ class GraspProcessorModule : public RFModule
                     cmd_success = computeGraspPose(grasp_pose);
                     yInfo() << "Pose retrieved: " << grasp_pose.toString();
 
-                    Bottle blist = reply.addList();
+                    Bottle &blist = reply.addList();
                     for (size_t i = 0; i< grasp_pose.size(); i++)
                     {
                         blist.addDouble(grasp_pose[i]);
