@@ -622,6 +622,57 @@ class GraspProcessorModule : public RFModule
             }
         }
 
+        if (command.get(0).toString() == "get_grasp_pose")
+        {
+            //  normal operation
+            if (command.size() == 3 || command.size() == 4)
+            {
+                obj = command.get(1).toString();
+                hand = command.get(2).toString();
+                if (hand == "right")
+                {
+                    grasping_hand = WhichHand::HAND_RIGHT;
+                }
+                else if (hand == "left")
+                {
+                    grasping_hand = WhichHand::HAND_LEFT;
+                }
+                else
+                {
+                    reply.addVocab(Vocab::encode("nack"));
+                    return true;
+                }
+                if (command.size() == 4 && command.get(3).toString() == "gaze")
+                {
+                    fixate_object = true;
+                }
+
+            }
+            else
+            {
+                reply.addVocab(Vocab::encode("nack"));
+                return true;
+            }
+            PointCloud<DataXYZRGBA> pc;
+            yDebug() << "Requested object: " << obj;
+            if (requestRefreshPointCloud(pc, obj, fixate_object))
+            {
+                if (requestRefreshSuperquadric(pc))
+                {
+                    cmd_success = computeGraspPose(grasp_pose);
+                    yInfo() << "Pose retrieved: " << grasp_pose.toString();
+
+                    Bottle &blist = reply.addList();
+                    for (size_t i = 0; i< grasp_pose.size(); i++)
+                    {
+                        blist.addDouble(grasp_pose[i]);
+                    }
+
+                    yInfo() << "Filled reply function" << reply.toString();
+                }
+            }
+        }
+
         if (command.get(0).toString() == "grasp")
         {
             if(halt_requested)
