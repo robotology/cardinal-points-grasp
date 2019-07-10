@@ -637,46 +637,109 @@ class GraspProcessorModule : public RFModule
             }
         }
 
-        if (command.get(0).toString() == "mobile_grasp_pose")
+        if (command.get(0).toString() == "ask_best_base_pose")
         {
-            Vector position;
-            //  normal operation
-            if (command.size() == 4)
-            {
-                obj = command.get(1).toString();
-                Bottle *position_b = command.get(2).asList();
-                if(!position_b)
-                {
-                    yError() << prettyError( __FUNCTION__,  "Invalid second parameter, should be a vector.");
-                    reply.addVocab(Vocab::encode("nack"));
-                    return true;
-                }
-                for(int i=0; i<position_b->size(); i++)
-                {
-                    position.push_back(position_b->get(i).asDouble());
-                }
-                hand = command.get(3).toString();
-                if (hand == "right")
-                {
-                    grasping_hand = WhichHand::HAND_RIGHT;
-                }
-                else if (hand == "left")
-                {
-                    grasping_hand = WhichHand::HAND_LEFT;
-                }
-                else
-                {
-                    yError() << prettyError( __FUNCTION__,  "Invalid hand parameter, should be either \"right\" or \"left\".");
-                    reply.addVocab(Vocab::encode("nack"));
-                    return true;
-                }
-
-            }
-            else
+            if (command.size() != 3)
             {
                 reply.addVocab(Vocab::encode("nack"));
                 return true;
             }
+
+            Bottle *grasp_pose_b = command.get(1).asList();
+            if(!grasp_pose_b)
+            {
+                yError() << prettyError( __FUNCTION__,  "Invalid first parameter, should be a vector.");
+                reply.addVocab(Vocab::encode("nack"));
+                return true;
+            }
+
+            if(grasp_pose_b->size() != 7)
+            {
+                yError() << prettyError( __FUNCTION__,  "Invalid dimension of first parameter, should be 7.");
+                reply.addVocab(Vocab::encode("nack"));
+                return true;
+            }
+
+            Vector grasp_pose;
+            for(int i=0; i<7; i++)
+            {
+                grasp_pose.push_back(grasp_pose_b->get(i).asDouble());
+            }
+
+            hand = command.get(2).toString();
+            if (hand == "right")
+            {
+                grasping_hand = WhichHand::HAND_RIGHT;
+            }
+            else if (hand == "left")
+            {
+                grasping_hand = WhichHand::HAND_LEFT;
+            }
+            else
+            {
+                yError() << prettyError( __FUNCTION__,  "Invalid hand parameter, should be either \"right\" or \"left\".");
+                reply.addVocab(Vocab::encode("nack"));
+                return true;
+            }
+
+            Matrix H = axis2dcm(grasp_pose.subVector(3,6));
+            H.setSubcol(grasp_pose.subVector(0,2), 0,3);
+            Vector x_d_hat, o_d_hat, q_d_hat;
+            if(askPoseFeasibility(H, x_d_hat, o_d_hat, q_d_hat, true))
+            {
+                yInfo() << "Pose" << grasp_pose.toString() << "is reachable using joints" << q_d_hat.toString();
+                reply.addVocab(Vocab::encode("ack"));
+                reply.addList().read(q_d_hat);
+                return true;
+            }
+            else
+            {
+                yInfo() << "Pose" << grasp_pose.toString() << "is not reachable";
+                reply.addVocab(Vocab::encode("nack"));
+                return false;
+            }
+        }
+
+        if (command.get(0).toString() == "mobile_grasp_pose")
+        {
+            if (command.size() != 4)
+            {
+                reply.addVocab(Vocab::encode("nack"));
+                return true;
+            }
+
+            obj = command.get(1).toString();
+
+            Bottle *position_b = command.get(2).asList();
+            if(!position_b)
+            {
+                yError() << prettyError( __FUNCTION__,  "Invalid second parameter, should be a vector.");
+                reply.addVocab(Vocab::encode("nack"));
+                return true;
+            }
+
+            Vector position;
+            for(int i=0; i<position_b->size(); i++)
+            {
+                position.push_back(position_b->get(i).asDouble());
+            }
+
+            hand = command.get(3).toString();
+            if (hand == "right")
+            {
+                grasping_hand = WhichHand::HAND_RIGHT;
+            }
+            else if (hand == "left")
+            {
+                grasping_hand = WhichHand::HAND_LEFT;
+            }
+            else
+            {
+                yError() << prettyError( __FUNCTION__,  "Invalid hand parameter, should be either \"right\" or \"left\".");
+                reply.addVocab(Vocab::encode("nack"));
+                return true;
+            }
+
             PointCloud<DataXYZRGBA> pc;
             yDebug() << "Requested object" << obj << "at position (" << position.toString() << ") with" << hand << "hand" ;
             if (requestRefreshPointCloudFromPosition(pc, position, false))
@@ -1627,16 +1690,89 @@ class GraspProcessorModule : public RFModule
 
         //  compute precision for movement
 
-        Matrix pose_mat_rotation = candidate_pose.submatrix(0,2, 0,2);
-        Vector x_d = candidate_pose.subcol(0,3,3);
-        Vector o_d = dcm2axis(pose_mat_rotation);
+        yDebug() << "Requested: " << candidate_pose.toString();
+
         Vector x_d_hat, o_d_hat, q_d_hat;
+
+        if(askPoseFeasibility(candidate_pose, x_d_hat, o_d_hat, q_d_hat, mobile_base))
+        {
+            //  calculate position cost function (first component of cost function)
+            cost[0] = norm(candidate_pose.subcol(0,3,3) - x_d_hat);
+
+            //  calculate orientation cost function
+            Matrix pose_mat_rotation = candidate_pose.submatrix(0,2, 0,2);
+            Matrix tmp = axis2dcm(o_d_hat).submatrix(0,2, 0,2);
+            Matrix orientation_error_matrix =  pose_mat_rotation * tmp.transposed();
+            Vector orientation_error_vector = dcm2axis(orientation_error_matrix);
+
+            Vector superq_XYZW_orientation = super_quadric_parameters.subVector(3,6);
+            Matrix superq_mat_orientation = axis2dcm(superq_XYZW_orientation).submatrix(0,2, 0,2);
+            Vector superq_axes_size = super_quadric_parameters.subVector(7,9);
+
+            Matrix pose_superq_mat_rotation = pose_mat_rotation.transposed() * superq_mat_orientation;
+            Vector pose_ax_size(3, 0.0);
+            for(int i=0 ; i<3 ; i++)
+            {
+                for(int j=0 ; j<3 ; j++)
+                {
+                    double v = pose_superq_mat_rotation(i,j) * superq_axes_size[j];
+                    pose_ax_size[i] += v*v;
+                }
+                pose_ax_size[i] = sqrt(pose_ax_size[i]);
+            }
+
+            if(mobile_base)
+            {
+                cost[1] = pow( fabs(q_d_hat[0]-super_quadric_parameters[0]), 2) + pow( fabs(q_d_hat[1]-super_quadric_parameters[1]), 2);
+            }
+            else
+            {
+                cost[1] = norm(orientation_error_vector.subVector(0,2)) * fabs(sin(orientation_error_vector(3)));
+
+                cost[1] = 0.5*cost[1] + 0.5*(1-pose_ax_size[1]/yarp::math::findMax(pose_ax_size));
+            }
+        }
+
+        stringstream ss;
+        if(cost[0]==std::numeric_limits<double>::max())
+            ss << "max ";
+        else
+            ss << cost[0] << " ";
+
+        if(cost[1]==std::numeric_limits<double>::max())
+            ss << "max";
+        else
+            ss << cost[1];
+
+        yDebug() << "Cost function: " << ss.str();
+
+        return true;
+
+    }
+
+    /****************************************************************/
+    bool askPoseFeasibility(const Matrix &p_d, Vector &x_d_hat, Vector &o_d_hat, Vector &q_d_hat, bool mobile_base)
+    {
+        /* p_d (desired pose)
+         * x_d_hat (reached position)
+         * o_d_hat (reached orientation)
+         * q_d_had (reached joints)
+         * mobile_base (enable solve with base motion)
+         */
+
+        x_d_hat.clear();
+        o_d_hat.clear();
+        q_d_hat.clear();
+
+        Matrix R_d = p_d.submatrix(0,2, 0,2);
+        Vector x_d = p_d.subcol(0,3,3);
+        Vector o_d = dcm2axis(R_d);
 
         if((robot == "icubSim") || (robot == "icub"))
         {
             if(mobile_base)
             {
-                yError() << prettyError( __FUNCTION__,  "getPoseCostFunction: mobile base not available with iCub");
+                yError() << prettyError( __FUNCTION__,  "Mobile base not available with iCub");
                 return false ;
             }
 
@@ -1650,7 +1786,7 @@ class GraspProcessorModule : public RFModule
             }
             else
             {
-                yError() << prettyError( __FUNCTION__,  "getPoseCostFunction: Invalid arm selected for kinematic!");
+                yError() << prettyError( __FUNCTION__,  "Invalid arm selected for kinematic!");
                 return false;
             }
 
@@ -1669,15 +1805,17 @@ class GraspProcessorModule : public RFModule
 
             if(!success)
             {
-                yError() << prettyError( __FUNCTION__,  "getPoseCostFunction: could not communicate with kinematics module");
+                yError() << prettyError( __FUNCTION__,  "Could not communicate with kinematics module");
                 return false;
             }
+
+            return true;
         }
         else
         {
             if(action_render_rpc.getOutputCount()<1)
             {
-                yError() << prettyError( __FUNCTION__,  "getPoseCostFunction: no connection to action rendering module");
+                yError() << prettyError( __FUNCTION__,  "No connection to action rendering module");
                 return false;
             }
 
@@ -1700,38 +1838,21 @@ class GraspProcessorModule : public RFModule
             }
             action_render_rpc.write(cmd, reply);
 
-            if(reply.size()<1)
+            if(reply.size()<3)
             {
-                yError() << prettyError( __FUNCTION__,  "getPoseCostFunction: empty reply from action rendering module");
+                yError() << prettyError( __FUNCTION__,  "Invalid reply size from action rendering module") << reply.toString();
                 return false;
             }
 
             if(reply.get(0).asVocab() != Vocab::encode("ack"))
             {
-                if(mobile_base)
-                {
-                    yInfo() << prettyError( __FUNCTION__,  "getPoseCostFunction: cost for mobile cost failed, invalid reply from action rendering module:") << reply.toString();
-
-                    cost[0] = std::numeric_limits<double>::max();
-                    cost[1] = std::numeric_limits<double>::max();
-                    return true;
-                }
-                else
-                {
-                    yError() << prettyError( __FUNCTION__,  "getPoseCostFunction: invalid reply from action rendering module:") << reply.toString();
-                    return false;
-                }
-            }
-
-            if(reply.size()<3)
-            {
-                yError() << prettyError( __FUNCTION__,  "getPoseCostFunction: invlaid reply size from action rendering module") << reply.toString();
+                yError() << prettyError( __FUNCTION__,  "Pose is not reachable");
                 return false;
             }
 
             if(!reply.check("q"))
             {
-                yError() << prettyError( __FUNCTION__,  "getPoseCostFunction: invalid reply from action rendering module: missing q:") << reply.toString();
+                yError() << prettyError( __FUNCTION__,  "Invalid reply from action rendering module: missing q:") << reply.toString();
                 return false;
             }
 
@@ -1741,7 +1862,7 @@ class GraspProcessorModule : public RFModule
 
             if(!reply.check("x"))
             {
-                yError() << prettyError( __FUNCTION__,  "getPoseCostFunction: invalid reply from action rendering module: missing x:") << reply.toString();
+                yError() << prettyError( __FUNCTION__,  "Invalid reply from action rendering module: missing x:") << reply.toString();
                 return false;
             }
 
@@ -1750,49 +1871,9 @@ class GraspProcessorModule : public RFModule
             for(int i=0 ; i<3 ; i++) x_d_hat[i] = position->get(i).asDouble();
             o_d_hat.resize(4);
             for(int i=0 ; i<4 ; i++) o_d_hat[i] = position->get(3+i).asDouble();
+
+            return true;
         }
-
-        yDebug() << "Requested: " << candidate_pose.toString();
-
-        //  calculate position cost function (first component of cost function)
-        cost[0] = norm(x_d - x_d_hat);
-
-        //  calculate orientation cost function
-        Matrix tmp = axis2dcm(o_d_hat).submatrix(0,2, 0,2);
-        Matrix orientation_error_matrix =  pose_mat_rotation * tmp.transposed();
-        Vector orientation_error_vector = dcm2axis(orientation_error_matrix);
-
-        Vector superq_XYZW_orientation = super_quadric_parameters.subVector(3,6);
-        Matrix superq_mat_orientation = axis2dcm(superq_XYZW_orientation).submatrix(0,2, 0,2);
-        Vector superq_axes_size = super_quadric_parameters.subVector(7,9);
-
-        Matrix pose_superq_mat_rotation = pose_mat_rotation.transposed() * superq_mat_orientation;
-        Vector pose_ax_size(3, 0.0);
-        for(int i=0 ; i<3 ; i++)
-        {
-            for(int j=0 ; j<3 ; j++)
-            {
-                double v = pose_superq_mat_rotation(i,j) * superq_axes_size[j];
-                pose_ax_size[i] += v*v;
-            }
-            pose_ax_size[i] = sqrt(pose_ax_size[i]);
-        }
-
-        if(mobile_base)
-        {
-            cost[1] = pow( fabs(q_d_hat[0]-super_quadric_parameters[0]), 2) + pow( fabs(q_d_hat[1]-super_quadric_parameters[1]), 2);
-        }
-        else
-        {
-            cost[1] = norm(orientation_error_vector.subVector(0,2)) * fabs(sin(orientation_error_vector(3)));
-
-            cost[1] = 0.5*cost[1] + 0.5*(1-pose_ax_size[1]/yarp::math::findMax(pose_ax_size));
-        }
-
-        yDebug() << "Cost function: " << cost.toString();
-
-        return true;
-
     }
 
     /****************************************************************/
@@ -2163,7 +2244,19 @@ class GraspProcessorModule : public RFModule
 
             //  best grasp pose is the first in the vector
             best_pose_index = sorted_costs[0].pose_original_index;
-            yInfo() << "getBestCandidatePose: best candidate cost: " << costs[best_pose_index].toString();
+
+            stringstream ss;
+            if(costs[best_pose_index][0]==std::numeric_limits<double>::max())
+                ss << "max ";
+            else
+                ss << costs[best_pose_index][0] << " ";
+
+            if(costs[best_pose_index][1]==std::numeric_limits<double>::max())
+                ss << "max";
+            else
+                ss << costs[best_pose_index][1];
+
+            yInfo() << "getBestCandidatePose: best candidate cost: " << ss.str();
 
             return true;
         }
@@ -2273,21 +2366,15 @@ class GraspProcessorModule : public RFModule
                 pose_candidates[idx]->pose_cost_function = costs[idx];
                 stringstream ss;
                 if(pose_candidates[idx]->pose_cost_function(0)==std::numeric_limits<double>::max())
-                {
                     ss << "max_";
-                }
                 else
-                {
                     ss << fixed << setprecision(3) << pose_candidates[idx]->pose_cost_function(0) << "_";
-                }
+
                 if(pose_candidates[idx]->pose_cost_function(1)==std::numeric_limits<double>::max())
-                {
                     ss << "max";
-                }
                 else
-                {
                     ss << fixed << setprecision(3) << pose_candidates[idx]->pose_cost_function(1);
-                }
+
                 pose_candidates[idx]->setvtkActorCaption(ss.str());
 
                 pose_captions[idx]->VisibilityOn();
