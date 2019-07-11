@@ -2058,6 +2058,7 @@ class GraspProcessorModule : public RFModule
             else
             {
                 yWarning() << "Couldn't retrieve fixed pose. Continuing with unchanged pose";
+		poseFixed = poseToFix;
             }
         }
         else
