@@ -175,6 +175,9 @@ class GraspProcessorModule : public RFModule
     Vector grasper_approach_parameters_right;
     Vector grasper_approach_parameters_left;
 
+    // Variables for mobile base grasping
+    Vector mobile_pose_noise;
+
     // Filtering constants
     double position_error_threshold;
 
@@ -639,7 +642,7 @@ class GraspProcessorModule : public RFModule
 
         if (command.get(0).toString() == "ask_best_base_pose")
         {
-            if (command.size() != 3)
+            if (command.size() < 3)
             {
                 reply.addVocab(Vocab::encode("nack"));
                 return true;
@@ -682,6 +685,32 @@ class GraspProcessorModule : public RFModule
                 return true;
             }
 
+            if(command.size() > 3)
+            {
+                Bottle *pose_noise_b = command.get(3).asList();
+                if(!pose_noise_b)
+                {
+                    yError() << prettyError( __FUNCTION__,  "Invalid third parameter, should be a vector.");
+                    reply.addVocab(Vocab::encode("nack"));
+                    return true;
+                }
+
+                if(pose_noise_b->size() != 2)
+                {
+                    yError() << prettyError( __FUNCTION__,  "Invalid dimension of third parameter, should be 2.");
+                    reply.addVocab(Vocab::encode("nack"));
+                    return true;
+                }
+
+                mobile_pose_noise[0] = pose_noise_b->get(0).asDouble();
+                mobile_pose_noise[1] = pose_noise_b->get(1).asDouble();
+            }
+            else
+            {
+                mobile_pose_noise[0] = 0;
+                mobile_pose_noise[1] = 0;
+            }
+
             Matrix H = axis2dcm(grasp_pose.subVector(3,6));
             H.setSubcol(grasp_pose.subVector(0,2), 0,3);
             Vector x_d_hat, o_d_hat, q_d_hat;
@@ -702,7 +731,7 @@ class GraspProcessorModule : public RFModule
 
         if (command.get(0).toString() == "mobile_grasp_pose")
         {
-            if (command.size() != 4)
+            if (command.size() < 4)
             {
                 reply.addVocab(Vocab::encode("nack"));
                 return true;
@@ -738,6 +767,32 @@ class GraspProcessorModule : public RFModule
                 yError() << prettyError( __FUNCTION__,  "Invalid hand parameter, should be either \"right\" or \"left\".");
                 reply.addVocab(Vocab::encode("nack"));
                 return true;
+            }
+
+            if(command.size() > 4)
+            {
+                Bottle *pose_noise_b = command.get(4).asList();
+                if(!pose_noise_b)
+                {
+                    yError() << prettyError( __FUNCTION__,  "Invalid fourth parameter, should be a vector.");
+                    reply.addVocab(Vocab::encode("nack"));
+                    return true;
+                }
+
+                if(pose_noise_b->size() != 2)
+                {
+                    yError() << prettyError( __FUNCTION__,  "Invalid dimension of fourth parameter, should be 2.");
+                    reply.addVocab(Vocab::encode("nack"));
+                    return true;
+                }
+
+                mobile_pose_noise[0] = pose_noise_b->get(0).asDouble();
+                mobile_pose_noise[1] = pose_noise_b->get(1).asDouble();
+            }
+            else
+            {
+                mobile_pose_noise[0] = 0;
+                mobile_pose_noise[1] = 0;
             }
 
             PointCloud<DataXYZRGBA> pc;
@@ -1830,11 +1885,13 @@ class GraspProcessorModule : public RFModule
             {
                 if(mobile_base) cmd.addList().read(grasper_approach_parameters_left);
                 cmd.addString("left");
+                if(mobile_base) cmd.addList().read(mobile_pose_noise);
             }
             else if(grasping_hand == WhichHand::HAND_RIGHT)
             {
                 if(mobile_base) cmd.addList().read(grasper_approach_parameters_right);
                 cmd.addString("right");
+                if(mobile_base) cmd.addList().read(mobile_pose_noise);
             }
             action_render_rpc.write(cmd, reply);
 
@@ -2475,7 +2532,7 @@ public:
         grasping_hand(WhichHand::HAND_RIGHT), min_object_size(3, 0.0), max_object_size(3, std::numeric_limits<double>::max()),
         grasper_specific_transform_right(eye(4,4)), grasper_specific_transform_left(eye(4,4)),
         grasper_approach_parameters_right(4, 0.0), grasper_approach_parameters_left(4, 0.0),
-        position_error_threshold(0.01)
+        position_error_threshold(0.01), mobile_pose_noise(2, 0.0)
     {
         planar_obstacle[2] = 1;
         planar_obstacle[3] = -(-0.15);
