@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <memory>
 #include <atomic>
+#include <mutex>
 
 #include <yarp/os/all.h>
 #include <yarp/sig/all.h>
@@ -54,7 +55,7 @@ using namespace yarp::sig;
 using namespace yarp::dev;
 using namespace yarp::math;
 
-Mutex mutex;
+mutex mtx;
 
 /****************************************************************/
 
@@ -95,7 +96,7 @@ public:
     void Execute(vtkObject *caller, unsigned long vtkNotUsed(eventId),
                  void *vtkNotUsed(callData)) override
     {
-        LockGuard lg(mutex);
+        lock_guard<mutex> lck(mtx);
         vtkRenderWindowInteractor* iren=static_cast<vtkRenderWindowInteractor*>(caller);
         if (closing!=nullptr)
         {
@@ -1250,7 +1251,7 @@ class GraspProcessorModule : public RFModule
     {
        if (points.size() > 0)
        {
-           LockGuard lg(mutex);
+           lock_guard<mutex> lck(mtx);
 
            //   set the vtk point cloud object with the read data
            vtk_points->set_points(points);
@@ -1297,7 +1298,7 @@ class GraspProcessorModule : public RFModule
         superq_params_sorted(10) = 0.0;
         superq_params_sorted(11) = 1.0;
 
-        LockGuard lg(mutex);
+        lock_guard<mutex> lck(mtx);
 
         vtk_superquadric ->set_parameters(superq_params_sorted);
 
@@ -1823,7 +1824,7 @@ class GraspProcessorModule : public RFModule
     void computeGraspCandidates(const Vector &superq_parameters, vector<Matrix> &grasp_pose_candidates)
     {
         //  compute a series of viable grasp candidates according to superquadric parameters
-        LockGuard lg(mutex);
+        lock_guard<mutex> lck(mtx);
 
         //  retrieve table height
         //  otherwise, leave default value
