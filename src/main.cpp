@@ -2133,7 +2133,10 @@ class GraspProcessorModule : public RFModule
                 }
             }
 
-            success = fixReachingOffset(best_pose, pose);
+            // return the best pose
+            pose = best_pose;
+
+            success = true;
         }
 
         return success;
