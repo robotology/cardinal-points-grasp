@@ -1357,6 +1357,7 @@ class GraspProcessorModule : public RFModule
         if (success && (point_cloud.size() > 0))
         {
             yDebug() << "Point cloud retrieved; contains " << point_cloud.size() << "points";
+            point_cloud = fixPointCloudForReaching(point_cloud);
             refreshPointCloud(point_cloud);
             return true;
         }
@@ -1462,6 +1463,7 @@ class GraspProcessorModule : public RFModule
         if (success && (point_cloud.size() > 0))
         {
             yDebug() << "Point cloud retrieved; contains " << point_cloud.size() << "points";
+            point_cloud = fixPointCloudForReaching(point_cloud);
             refreshPointCloud(point_cloud);
             return true;
         }
