@@ -2072,6 +2072,70 @@ class GraspProcessorModule : public RFModule
     }
 
     /****************************************************************/
+    bool retrieveReachingCalibrationTransformation(Matrix& transformation)
+    {
+        // compose entry iol-<grasping_hand>
+        std::string entry_name = "iol-";
+        if (grasping_hand == WhichHand::HAND_LEFT)
+            entry_name += "left";
+        else
+            entry_name += "right";
+
+        // compose command
+        Bottle command;
+        command.addString("get_matrix");
+        command.addString(entry_name);
+
+        // send request via rpc
+        Bottle reply_;
+        reach_calib_rpc.write(command, reply_);
+        const Bottle reply = reply_;
+
+        // check reply
+        if (reply.size() != 2)
+        {
+            yError() << prettyError( __FUNCTION__,  "Failure retrieving " + entry_name + " transformation");
+            return false;
+        }
+
+        if (reply.get(0).asVocab() == Vocab::encode("fail"))
+        {
+            yError() << prettyError( __FUNCTION__,  entry_name + " transformation is not available");
+            return false;
+        }
+
+        // get matrix
+        const Bottle* bottle_H_outer = reply.get(1).asList();
+        if ((bottle_H_outer == nullptr) || (bottle_H_outer->size() != 3))
+        {
+            yError() << prettyError( __FUNCTION__,  "Failure retrieving " + entry_name + " transformation");
+            return false;
+        }
+
+        Matrix H(4, 4);
+        const Bottle* bottle_H = bottle_H_outer->get(2).asList();
+        if (bottle_H->size() != (H.rows() * H.cols()))
+        {
+            yError() << prettyError( __FUNCTION__,  entry_name + " transformation is malformed");
+            return false;
+        }
+
+        std::size_t k = 0;
+        for (std::size_t i = 0; i < 4; i++)
+            for (std::size_t j = 0; j < 4; j++)
+                H(i, j) = bottle_H->get(k++).asDouble();
+
+        // assign output
+        transformation = H;
+
+        yInfo() << "GraspPoseProcessor::retrieveReachingCalibrationTransformation.";
+        yInfo() << "Retrieved H for" << entry_name << ":";
+        yInfo() << transformation.toString();
+
+        return true;
+    }
+
+    /****************************************************************/
     bool computeGraspPose(Vector &pose)
     {
         //  execute the pose computation pipeline
