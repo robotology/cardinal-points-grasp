@@ -1369,6 +1369,37 @@ class GraspProcessorModule : public RFModule
     }
 
     /****************************************************************/
+    PointCloud<DataXYZRGBA> fixPointCloudForReaching(const PointCloud<DataXYZRGBA>& input)
+    {
+        PointCloud<DataXYZRGBA> output = input;
+
+        Matrix H;
+        if (retrieveReachingCalibrationTransformation(H))
+        {
+            for (std::size_t i = 0; i < output.size(); i++)
+            {
+                Vector point(4);
+                point(0) = input(i).x;
+                point(1) = input(i).y;
+                point(2) = input(i).z;
+                point(3) = 1.0;
+
+                Vector point_calibrated = H * point;
+                output(i).x = point_calibrated(0);
+                output(i).y = point_calibrated(1);
+                output(i).z = point_calibrated(2);
+            }
+        }
+        else
+        {
+            yWarning() << "GraspPoseProcessor::fixPointCloudForReaching. Cannot retrieve iolReachingCalibration transformation.";
+            yWarning() << "GraspPoseProcessor::fixPointCloudForReaching. The point cloud will be not converted to the manipulator domain.";
+        }
+
+        return output;
+    }
+
+    /****************************************************************/
     bool requestRefreshPointCloudFromPosition(PointCloud<DataXYZRGBA> &point_cloud, const Vector &position, const bool &fixate_object = false)
     {
         //  query point-cloud-read via rpc for the point cloud
