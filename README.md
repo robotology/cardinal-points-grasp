@@ -8,7 +8,7 @@ Simple superquadric-based grasping pose generator and renderer for iCub
 - [IOL](https://github.com/robotology/iol)
 - [point-cloud-read](https://github.com/robotology/point-cloud-read)
 - [find-superquadric](https://github.com/robotology/find-superquadric)
-- [VTK 8.1](https://www.vtk.org/)
+- [VTK 7.1](https://www.vtk.org/)
 
 ### Installation
 ```

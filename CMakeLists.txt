@@ -22,7 +22,7 @@ find_package(ICUBcontrib REQUIRED)
 list(APPEND CMAKE_MODULE_PATH ${ICUB_MODULE_PATH})
 list(APPEND CMAKE_MODULE_PATH ${ICUBCONTRIB_MODULE_PATH})
 
-find_package(VTK 8.1 REQUIRED)
+find_package(VTK 7.1 REQUIRED)
 include(${VTK_USE_FILE})
 
 include(ICUBcontribHelpers)
