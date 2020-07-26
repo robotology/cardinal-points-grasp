@@ -147,11 +147,17 @@ void Superquadric::set_parameters(const Vector &r)
     //  set coefficients of the superquadric
     //  (dimensions (x0 x1 x2)) (exponents (x3 x4)) (center (x5 x6 x7)) (orientation (x8 x9 x10 x11))
     //  suppose x8 as angle, x9 x10 x11 define the rotation axis
-    vtk_superquadric->SetScale(r[0], r[1], r[2]);
-    vtk_superquadric->SetPhiRoundness(r[3]);
-    vtk_superquadric->SetThetaRoundness(r[4]);
 
-    vtk_sample->SetModelBounds(-2*r[0], 2*r[0], -2*r[1], 2*r[1], -2*r[2], 2*r[2]);
+    // Note: roundness parameter for axes x and y is shared in SQ model,
+    //       but VTK shares axes x and z (ThetaRoundness).
+    //       To get a good display, directions of axes y and z need to be swapped
+    //       => parameters for y and z are inverted and a rotation of -90 degrees around x is added
+
+    vtk_superquadric->SetScale(r[0], r[2], r[1]); // invert y and z
+    vtk_superquadric->SetPhiRoundness(r[3]); // roundness along model z axis (vtk y axis)
+    vtk_superquadric->SetThetaRoundness(r[4]); // common roundness along model x and y axes (vtk x and z axes)
+
+    vtk_sample->SetModelBounds(-r[0], r[0], -r[2], r[2], -r[1], r[1]);
 
     //  center of the superquadric is left to zero, is translated by the vtkTransform
     //  translate and set the pose of the superquadric
@@ -160,7 +166,7 @@ void Superquadric::set_parameters(const Vector &r)
     vtk_transform->Identity();
     vtk_transform->Translate(r[5], r[6], r[7]);
     vtk_transform->RotateWXYZ(r[8], r[9], r[10], r[11]);
-
+    vtk_transform->RotateX(-90.0); // rotate to invert y and z
 }
 
 /****************************************************************/
@@ -186,10 +192,9 @@ Vector Superquadric::getAxesSize()
     Vector axes_vec;
     axes = vtk_superquadric->GetScale();
     axes_vec.resize(3);
-    for (size_t idx = 0; idx<3; idx++)
-    {
-        axes_vec(idx) = axes[idx];
-    }
+    axes_vec(0) = axes[0];
+    axes_vec(1) = axes[2];
+    axes_vec(2) = axes[1];
 
     //  scale the axes wrt superquadric size
     using namespace yarp::math;
@@ -209,6 +214,12 @@ Vector Superquadric::getOrientationXYZW()
 
     orientationWXYZ = vtk_transform->GetOrientationWXYZ();
 
+    vtkSmartPointer<vtkTransform> vtk_transform_tmp = vtkSmartPointer<vtkTransform>::New();
+
+    vtk_transform_tmp->RotateWXYZ(orientationWXYZ[0], orientationWXYZ[1], orientationWXYZ[2], orientationWXYZ[3]);
+    vtk_transform_tmp->RotateX(90.0);
+
+    orientationWXYZ = vtk_transform_tmp->GetOrientationWXYZ();
     orientationWXYZ_vec(0) = orientationWXYZ[1];
     orientationWXYZ_vec(1) = orientationWXYZ[2];
     orientationWXYZ_vec(2) = orientationWXYZ[3];
@@ -217,6 +228,20 @@ Vector Superquadric::getOrientationXYZW()
     //yDebug() << "Superquadric processor: orientation WXYZ orientation is " << orientationWXYZ_vec.toString();
 
     return orientationWXYZ_vec;
+}
+
+/****************************************************************/
+Vector Superquadric::getRoundness()
+{
+    //  get the superquadric roundness parameters and return as a yarp Vector
+    Vector roundness_vec(2);
+
+    roundness_vec(0) = vtk_superquadric->GetPhiRoundness();
+    roundness_vec(1) = vtk_superquadric->GetThetaRoundness();
+
+    //yDebug() << "Superquadric processor: roundness is " << roundness_vec.toString();
+
+    return roundness_vec;
 }
 
 /****************************************************************/

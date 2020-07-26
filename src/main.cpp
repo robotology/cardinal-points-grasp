@@ -179,6 +179,10 @@ class GraspProcessorModule : public RFModule
     // Filtering constants
     double position_error_threshold;
 
+    // Candidate pose generation parameters
+    double roundness_threshold; // threshold on the roundness of the object to generate pseudo cardinal poses
+    int nb_cardinal_levels; // number of levels of pseudo cardinal poses generated (1 or lower = normal)
+
     //  visualization parameters
     int x, y, h, w;
 
@@ -397,6 +401,16 @@ class GraspProcessorModule : public RFModule
         position_error_threshold = rf.check("position_error_threshold", Value(0.01)).asDouble();
         yInfo() << "Position error threshold loaded=" << position_error_threshold;
 
+        roundness_threshold = rf.check("roundness_threshold", Value(1.0)).asDouble();
+        yInfo() << "Roundness threshold loaded=" << roundness_threshold;
+
+        nb_cardinal_levels = rf.check("nb_cardinal_levels", Value(1)).asInt();
+        if(nb_cardinal_levels < 1)
+        {
+            nb_cardinal_levels = 1;
+        }
+        yInfo() << "Number of cardinal point levels loaded=" << nb_cardinal_levels;
+
         //  open the necessary ports
         superq_rpc.open("/" + moduleName + "/superquadricRetrieve:rpc");
         point_cloud_rpc.open("/" + moduleName + "/pointCloud:rpc");
@@ -488,7 +502,8 @@ class GraspProcessorModule : public RFModule
         vtk_renderer->SetActiveCamera(vtk_camera);
 
         //  prepare the pose actors vector
-        for (size_t idx = 0; idx < 25; idx++)
+
+        for (size_t idx = 0; idx < 6*pow(2, nb_cardinal_levels+1); idx++)
         {
             vtkSmartPointer<vtkAxesActor> ax_actor = vtkSmartPointer<vtkAxesActor>::New();
             vtkSmartPointer<vtkCaptionActor2D> cap_actor = vtkSmartPointer<vtkCaptionActor2D>::New();
@@ -1023,13 +1038,13 @@ class GraspProcessorModule : public RFModule
         if (command.get(0).toString() == "get_raw_grasp_poses")
         {
             // compute raw grasp poses candidates from superquadric parameters
-            // superquadric parameters (center_x center_y center_z rot_axis_x rot_axis_y rot_axis_z angle axis_size_1 axis_size_2 axis_size_3)
+            // superquadric parameters (center_x center_y center_z rot_axis_x rot_axis_y rot_axis_z angle axis_size_1 axis_size_2 axis_size_3 roundness_1 roundness_2)
             // hand to use "right"/"left"
-            if (command.size() > 10)
+            if (command.size() > 12)
             {
-                if (command.size() > 11)
+                if (command.size() > 13)
                 {
-                    hand = command.get(11).toString();
+                    hand = command.get(13).toString();
                     if (hand == "right")
                     {
                         grasping_hand = WhichHand::HAND_RIGHT;
@@ -1045,8 +1060,8 @@ class GraspProcessorModule : public RFModule
                     }
                 }
 
-                Vector super_quadric_parameters(10);
-                for(int i=0 ; i<10 ; i++) super_quadric_parameters[i] = command.get(i+1).asDouble();
+                Vector super_quadric_parameters(12);
+                for(int i=0 ; i<12 ; i++) super_quadric_parameters[i] = command.get(i+1).asDouble();
 
                 vector<Matrix> raw_grasp_pose_candidates;
                 this->computeRawGraspPoseCandidates(super_quadric_parameters, raw_grasp_pose_candidates);
@@ -1514,6 +1529,12 @@ class GraspProcessorModule : public RFModule
     {
         //  filter candidate grasp. True for good grasp
 
+        if(super_quadric_parameters.size() < 10)
+        {
+            yError() << prettyError( __FUNCTION__,  "isCandidateGraspFeasible: invalid superquadric parameters vector dimensions");
+            return false ;
+        }
+
         Vector root_z_axis(3, 0.0);
         root_z_axis(2) = 1;
 
@@ -1540,9 +1561,10 @@ class GraspProcessorModule : public RFModule
          * 2 - object small enough for grasping
          * 3 - thumb cannot point down
          * 4 - palm cannot point up
+         * 5 - fingers cannot point up
          */
 
-        bool ok1=true, ok2=true, ok3=false, ok4=false;
+        bool ok1=true, ok2=true, ok3=false, ok4=false, ok5=false;
         for(int i=0 ; i<3 ; i++)
         {
             double object_size = 2*pose_ax_size[i];
@@ -1550,19 +1572,30 @@ class GraspProcessorModule : public RFModule
             ok2 &= (object_size < max_object_size[i]);
         }
 
-        ok3 = dot(pose_mat_rotation.getCol(1), root_z_axis) <= 0.1;
+        Matrix hand_mat_rotation;
+        if(grasping_hand == WhichHand::HAND_RIGHT)
+        {
+            hand_mat_rotation = pose_mat_rotation * grasper_specific_transform_right.submatrix(0,2, 0,2);
+        }
+        else
+        {
+            hand_mat_rotation = pose_mat_rotation * grasper_specific_transform_left.submatrix(0,2, 0,2);
+        }
+
+        ok3 = dot(hand_mat_rotation.getCol(1), root_z_axis) <= 0.1;
         if (grasping_hand == WhichHand::HAND_RIGHT)
         {
             //  ok if hand z axis points downward
-            ok4 = (dot(pose_mat_rotation.getCol(2), root_z_axis) <= 0.1);
+            ok4 = (dot(hand_mat_rotation.getCol(2), root_z_axis) <= 0.1);
         }
         else
         {
             //  ok if hand z axis points upwards
-            ok4 = (dot(pose_mat_rotation.getCol(2), root_z_axis) >= -0.1);
+            ok4 = (dot(hand_mat_rotation.getCol(2), root_z_axis) >= -0.1);
         }
+        ok5 = dot(hand_mat_rotation.getCol(0), root_z_axis) <= 0.1;
 
-        return (ok1 && ok2 && ok3 && ok4);
+        return (ok1 && ok2 && ok3 && ok4 && ok5);
     }
 
     /****************************************************************/
@@ -1570,7 +1603,7 @@ class GraspProcessorModule : public RFModule
     {
         cost.resize(2, std::numeric_limits<double>::max());
 
-        if(super_quadric_parameters.size() != 10)
+        if(super_quadric_parameters.size() < 10)
         {
             yError() << prettyError( __FUNCTION__,  "getPoseCostFunction: invalid superquadric parameters vector dimensions");
             return false ;
@@ -1725,50 +1758,92 @@ class GraspProcessorModule : public RFModule
 
         raw_grasp_pose_candidates.clear();
 
+        if (super_quadric_parameters.size() < 12)
+        {
+            yError() << prettyError( __FUNCTION__,  "computeRawGraspPoseCandidates: invalid superquadric parameters vector dimensions");
+            return;
+        }
+
         Vector superq_center = super_quadric_parameters.subVector(0,2);
         Vector superq_XYZW_orientation = super_quadric_parameters.subVector(3,6);
         Vector superq_axes_size = super_quadric_parameters.subVector(7,9);
+        Vector superq_roundness = super_quadric_parameters.subVector(10,11);
 
-        //  get orientation of the superq in 3x3 rotation matrix form
-
+        // get orientation of the superq in 3x3 rotation matrix form
         Matrix superq_mat_orientation = axis2dcm(superq_XYZW_orientation).submatrix(0,2, 0,2);
 
-        //  columns of rotation matrix are superq axes direction
-        //  in root reference frame;
-        Vector sq_axis_x = superq_mat_orientation.getCol(0);
-        Vector sq_axis_y = superq_mat_orientation.getCol(1);
+        // get vertical axis of the superq
         Vector sq_axis_z = superq_mat_orientation.getCol(2);
 
-        //  create all possible candidates for pose evaluation
-        //  create search space for grasp axes x and y
-        vector<Vector> search_space_gx = {sq_axis_x, -1*sq_axis_x, sq_axis_y, -1*sq_axis_y};
-        vector<Vector> search_space_gy = {sq_axis_x, -1*sq_axis_x, sq_axis_y, -1*sq_axis_y, sq_axis_z, -1*sq_axis_z};
+        // Check number of levels of pseudo cardinal points, depending on superq roundness
 
-        //  create actual candidates
-        for (size_t idx = 0; idx < search_space_gx.size(); idx++)
+        int nb_pose_levels = 1;
+        if( (superq_roundness[1] > roundness_threshold) && (nb_cardinal_levels > 1) )
         {
-            Vector gx = search_space_gx[idx];
-            //  for each candidate gx axis, try all gy possibilities
-            for (size_t jdx = 0; jdx < search_space_gy.size(); jdx++)
+            nb_pose_levels = nb_cardinal_levels;
+        }
+
+        int nb_pseudo_pose = pow(2, nb_pose_levels+1);
+        double delta_angle = 2*M_PI / (double)nb_pseudo_pose;
+
+        // Generate grasp candidates
+
+        Matrix candidate_pose(4,4);
+        candidate_pose(3,3) = 1;
+
+        Vector o_top(4,0.0);
+        o_top[0] = 1.0;
+        o_top[3] = M_PI;
+        Matrix R_top = superq_mat_orientation * axis2dcm(o_top).submatrix(0,2, 0,2);
+        Vector T_top = superq_center + superq_axes_size[2] * sq_axis_z;
+
+        Matrix R_bot = superq_mat_orientation;
+        Vector T_bot = superq_center - superq_axes_size[2] * sq_axis_z;
+
+        Vector o_side_spec(4,0.0);
+        o_side_spec[1] = 1.0;
+        o_side_spec[3] = -M_PI / 2.0;
+        Matrix R_side_spec = axis2dcm(o_side_spec).submatrix(0,2, 0,2);
+
+        for(double angle=0 ; angle<2*M_PI ; angle+=delta_angle)
+        {
+            Vector o_cardinal(4,0.0);
+            o_cardinal[2] = 1.0;
+            o_cardinal[3] = angle;
+            Matrix R_cardinal = axis2dcm(o_cardinal).submatrix(0,2, 0,2);;
+
+            // Top
+            candidate_pose.setSubcol(T_top, 0,3);
+            candidate_pose.setSubmatrix(R_top * R_cardinal, 0, 0);
+            raw_grasp_pose_candidates.push_back(candidate_pose);
+
+            // Bottom
+            candidate_pose.setSubcol(T_bot, 0,3);
+            candidate_pose.setSubmatrix(R_bot * R_cardinal, 0, 0);
+            raw_grasp_pose_candidates.push_back(candidate_pose);
+
+            // Sides
+            Vector T_side = R_cardinal.subcol(0,0, 3);
+
+            double tx=pow(abs(T_side[0]/superq_axes_size[0]), 2.0/superq_roundness[1]);
+            double ty=pow(abs(T_side[1]/superq_axes_size[1]), 2.0/superq_roundness[1]);
+            double tz=pow(abs(T_side[2]/superq_axes_size[2]), 2.0/superq_roundness[0]);
+            double F=pow(pow(tx+ty, superq_roundness[1]/superq_roundness[0])+tz, superq_roundness[0]/2.0);
+
+            T_side = 1.0 / F * T_side;
+
+            candidate_pose.setSubcol(superq_center + superq_mat_orientation * T_side, 0,3);
+
+            for(int i=0 ; i<4 ; i++)
             {
-                //  create a gx, gy orthogonal couple
-                Vector gy = search_space_gy[jdx];
-                if (dot(gx, gy)*dot(gx, gy) < 0.0001)
-                {
-                    Matrix candidate_pose(4,4);
-                    candidate_pose(3,3) = 1;
-                    //  create gz with cross product
-                    //  create candidate entry
-                    Vector gz = cross(gx, gy);
+                Vector o_hand(4,0.0);
+                o_hand[2] = 1.0;
+                o_hand[3] = i * M_PI / 2.0;
+                Matrix R_hand = axis2dcm(o_hand).submatrix(0,2, 0,2);
 
-                    candidate_pose.setSubcol(gx, 0,0);
-                    candidate_pose.setSubcol(gy, 0,1);
-                    candidate_pose.setSubcol(gz, 0,2);
-                    double s = (grasping_hand == WhichHand::HAND_RIGHT ? -1.0 : 1.0);
-                    candidate_pose.setSubcol(superq_center + s * superq_axes_size(3 - idx/2 - jdx/2) / norm(gz) * gz, 0,3);
+                candidate_pose.setSubmatrix(superq_mat_orientation * R_cardinal * R_side_spec * R_hand, 0, 0);
 
-                    raw_grasp_pose_candidates.push_back(candidate_pose);
-                }
+                raw_grasp_pose_candidates.push_back(candidate_pose);
             }
         }
     }
@@ -1779,6 +1854,12 @@ class GraspProcessorModule : public RFModule
         // modify the grasping poses to account for the robot and table  geometry and prune the poses that are not realistic
 
         refined_grasp_pose_candidates.clear();
+
+        if(super_quadric_parameters.size() < 10)
+        {
+            yError() << prettyError( __FUNCTION__,  "refineGraspPoseCandidates: invalid superquadric parameters vector dimensions");
+            return;
+        }
 
         Vector grasper_bounding_box;
         if(grasping_hand == WhichHand::HAND_RIGHT)
@@ -1794,6 +1875,8 @@ class GraspProcessorModule : public RFModule
         for(size_t idx=0 ; idx<raw_grasp_pose_candidates.size() ; idx++)
         {
             Matrix pose_candidate = raw_grasp_pose_candidates[idx];
+
+            // check if pose is feasible with respect to grasper/object size and some grasper orientation constraints
             if (isCandidateGraspFeasible(super_quadric_parameters, pose_candidate))
             {
                 // apply robot specific transform
@@ -1915,6 +1998,7 @@ class GraspProcessorModule : public RFModule
         Vector superq_axes_size = superq_parameters.subVector(7,9);
 
         pose_candidates.clear();
+
         for(size_t idx=0 ; idx<grasp_pose_candidates.size() ; idx++)
         {
             shared_ptr<GraspPose> candidate_pose = shared_ptr<GraspPose>(new GraspPose);
@@ -1976,7 +2060,7 @@ class GraspProcessorModule : public RFModule
     /****************************************************************/
     bool getBestCandidatePose(const Vector &super_quadric_parameters, const vector<Matrix> &grasp_pose_candidates, int &best_pose_index, vector<Vector> &costs)
     {
-        if (super_quadric_parameters.size() < 0)
+        if (super_quadric_parameters.size() < 10)
         {
             yError() << prettyError( __FUNCTION__,  "getBestCandidatePose: invalid superquadric parameters vector dimensions");
             return false;
@@ -2178,7 +2262,7 @@ class GraspProcessorModule : public RFModule
         //  returns a failure
 
         //  get superquadric parameters
-        Vector superq_parameters(10);
+        Vector superq_parameters(12);
         Vector superq_center = vtk_superquadric->getCenter();
         superq_parameters.setSubvector(0, superq_center);
         Vector superq_XYZW_orientation = vtk_superquadric->getOrientationXYZW();
@@ -2186,6 +2270,8 @@ class GraspProcessorModule : public RFModule
         superq_parameters.setSubvector(3, superq_XYZW_orientation);
         Vector superq_axes_size = vtk_superquadric->getAxesSize();
         superq_parameters.setSubvector(7, superq_axes_size);
+        Vector superq_roundness = vtk_superquadric->getRoundness();
+        superq_parameters.setSubvector(10, superq_roundness);
 
         vector<Matrix> grasp_pose_candidates;
         computeGraspCandidates(superq_parameters, grasp_pose_candidates);
