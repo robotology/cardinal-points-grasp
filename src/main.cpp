@@ -201,17 +201,17 @@ class GraspProcessorModule : public RFModule
         yInfo() << "Opening module for connection with robot" << robot;
 
         string control_arms = rf.check("control-arms", Value("both")).toString();
-        x = rf.check("x", Value(0)).asInt();
-        y = rf.check("y", Value(0)).asInt();
-        w = rf.check("width", Value(600)).asInt();
-        h = rf.check("height", Value(600)).asInt();
+        x = rf.check("x", Value(0)).asInt32();
+        y = rf.check("y", Value(0)).asInt32();
+        w = rf.check("width", Value(600)).asInt32();
+        h = rf.check("height", Value(600)).asInt32();
 
         Bottle *list = rf.find("min_object_size").asList();
         if(list)
         {
             if(list->size() == 3)
             {
-                for(int i=0 ; i<3 ; i++) min_object_size[i] = list->get(i).asDouble();
+                for(int i=0 ; i<3 ; i++) min_object_size[i] = list->get(i).asFloat64();
             }
             else
             {
@@ -229,7 +229,7 @@ class GraspProcessorModule : public RFModule
         {
             if(list->size() == 3)
             {
-                for(int i=0 ; i<3 ; i++) max_object_size[i] = list->get(i).asDouble();
+                for(int i=0 ; i<3 ; i++) max_object_size[i] = list->get(i).asFloat64();
             }
             else
             {
@@ -251,8 +251,8 @@ class GraspProcessorModule : public RFModule
         {
             if(list->size() == 7)
             {
-                for(int i=0 ; i<3 ; i++) grasp_specific_translation[i] = list->get(i).asDouble();
-                for(int i=0 ; i<4 ; i++) grasp_specific_orientation[i] = list->get(3+i).asDouble();
+                for(int i=0 ; i<3 ; i++) grasp_specific_translation[i] = list->get(i).asFloat64();
+                for(int i=0 ; i<4 ; i++) grasp_specific_orientation[i] = list->get(3+i).asFloat64();
             }
             else
             {
@@ -283,8 +283,8 @@ class GraspProcessorModule : public RFModule
         {
             if(list->size() == 7)
             {
-                for(int i=0 ; i<3 ; i++) grasp_specific_translation[i] = list->get(i).asDouble();
-                for(int i=0 ; i<4 ; i++) grasp_specific_orientation[i] = list->get(3+i).asDouble();
+                for(int i=0 ; i<3 ; i++) grasp_specific_translation[i] = list->get(i).asFloat64();
+                for(int i=0 ; i<4 ; i++) grasp_specific_orientation[i] = list->get(3+i).asFloat64();
             }
             else
             {
@@ -311,7 +311,7 @@ class GraspProcessorModule : public RFModule
         {
             if(list->size() == 4)
             {
-                for(int i=0 ; i<4 ; i++) grasper_approach_parameters_right[i] = list->get(i).asDouble();
+                for(int i=0 ; i<4 ; i++) grasper_approach_parameters_right[i] = list->get(i).asFloat64();
             }
             else
             {
@@ -332,7 +332,7 @@ class GraspProcessorModule : public RFModule
         {
             if(list->size() == 4)
             {
-                for(int i=0 ; i<4 ; i++) grasper_approach_parameters_left[i] = list->get(i).asDouble();
+                for(int i=0 ; i<4 ; i++) grasper_approach_parameters_left[i] = list->get(i).asFloat64();
             }
             else
             {
@@ -353,7 +353,7 @@ class GraspProcessorModule : public RFModule
         {
             if(list->size() == 6)
             {
-                for(int i=0 ; i<6 ; i++) grasper_bounding_box_right[i] = list->get(i).asDouble();
+                for(int i=0 ; i<6 ; i++) grasper_bounding_box_right[i] = list->get(i).asFloat64();
             }
             else
             {
@@ -367,7 +367,7 @@ class GraspProcessorModule : public RFModule
         {
             if(list->size() == 6)
             {
-                for(int i=0 ; i<6 ; i++) grasper_bounding_box_left[i] = list->get(i).asDouble();
+                for(int i=0 ; i<6 ; i++) grasper_bounding_box_left[i] = list->get(i).asFloat64();
             }
             else
             {
@@ -381,7 +381,7 @@ class GraspProcessorModule : public RFModule
         {
             if(list->size() == 4)
             {
-                for(int i=0 ; i<4 ; i++) planar_obstacle[i] = list->get(i).asDouble();
+                for(int i=0 ; i<4 ; i++) planar_obstacle[i] = list->get(i).asFloat64();
             }
             else
             {
@@ -395,16 +395,16 @@ class GraspProcessorModule : public RFModule
         yInfo() << "Planar obstacle loaded\n" << planar_obstacle.toString();
 
 
-        obstacle_safety_distance = rf.check("obstacle_safety_distance", Value(0.0)).asDouble();
+        obstacle_safety_distance = rf.check("obstacle_safety_distance", Value(0.0)).asFloat64();
         yInfo() << "Obstacle safety distance loaded=" << obstacle_safety_distance;
 
-        position_error_threshold = rf.check("position_error_threshold", Value(0.01)).asDouble();
+        position_error_threshold = rf.check("position_error_threshold", Value(0.01)).asFloat64();
         yInfo() << "Position error threshold loaded=" << position_error_threshold;
 
-        roundness_threshold = rf.check("roundness_threshold", Value(1.0)).asDouble();
+        roundness_threshold = rf.check("roundness_threshold", Value(1.0)).asFloat64();
         yInfo() << "Roundness threshold loaded=" << roundness_threshold;
 
-        nb_cardinal_levels = rf.check("nb_cardinal_levels", Value(1)).asInt();
+        nb_cardinal_levels = rf.check("nb_cardinal_levels", Value(1)).asInt32();
         if(nb_cardinal_levels < 1)
         {
             nb_cardinal_levels = 1;
@@ -612,7 +612,7 @@ class GraspProcessorModule : public RFModule
                 }
                 else
                 {
-                    reply.addVocab(Vocab::encode("nack"));
+                    reply.addVocab32(Vocab32::encode("nack"));
                     return true;
                 }
                 if (command.size() == 4 && command.get(3).toString() == "gaze")
@@ -623,7 +623,7 @@ class GraspProcessorModule : public RFModule
             }
             else
             {
-                reply.addVocab(Vocab::encode("nack"));
+                reply.addVocab32(Vocab32::encode("nack"));
                 return true;
             }
             PointCloud<DataXYZRGBA> pc;
@@ -655,7 +655,7 @@ class GraspProcessorModule : public RFModule
                 }
                 else
                 {
-                    reply.addVocab(Vocab::encode("nack"));
+                    reply.addVocab32(Vocab32::encode("nack"));
                     return true;
                 }
                 if (command.size() == 4 && command.get(3).toString() == "gaze")
@@ -666,7 +666,7 @@ class GraspProcessorModule : public RFModule
             }
             else
             {
-                reply.addVocab(Vocab::encode("nack"));
+                reply.addVocab32(Vocab32::encode("nack"));
                 return true;
             }
             PointCloud<DataXYZRGBA> pc;
@@ -681,7 +681,7 @@ class GraspProcessorModule : public RFModule
                     Bottle &blist = reply.addList();
                     for (size_t i = 0; i< grasp_pose.size(); i++)
                     {
-                        blist.addDouble(grasp_pose[i]);
+                        blist.addFloat64(grasp_pose[i]);
                     }
 
                     yInfo() << "Filled reply function" << reply.toString();
@@ -694,7 +694,7 @@ class GraspProcessorModule : public RFModule
             if(halt_requested)
             {
                 yInfo() << "Halt requested before end of process";
-                reply.addVocab(Vocab::encode("nack"));
+                reply.addVocab32(Vocab32::encode("nack"));
                 return true;
             }
 
@@ -713,7 +713,7 @@ class GraspProcessorModule : public RFModule
                 }
                 else
                 {
-                    reply.addVocab(Vocab::encode("nack"));
+                    reply.addVocab32(Vocab32::encode("nack"));
                     return true;
                 }
                 if (command.size() == 4 && command.get(3).toString() == "gaze")
@@ -724,7 +724,7 @@ class GraspProcessorModule : public RFModule
             else
             {
                 yError() << prettyError( __FUNCTION__,  "Invalid command size");
-                reply.addVocab(Vocab::encode("nack"));
+                reply.addVocab32(Vocab32::encode("nack"));
                 return true;
             }
 
@@ -734,49 +734,49 @@ class GraspProcessorModule : public RFModule
             if(halt_requested)
             {
                 yInfo() << "Halt requested before end of process";
-                reply.addVocab(Vocab::encode("nack"));
+                reply.addVocab32(Vocab32::encode("nack"));
                 return true;
             }
 
             if (!requestRefreshPointCloud(pc, obj, fixate_object))
             {
                 yError() << prettyError( __FUNCTION__,  "Could not refresh point cloud.");
-                reply.addVocab(Vocab::encode("nack"));
+                reply.addVocab32(Vocab32::encode("nack"));
                 return true;
             }
 
             if(halt_requested)
             {
                 yInfo() << "Halt requested before end of process";
-                reply.addVocab(Vocab::encode("nack"));
+                reply.addVocab32(Vocab32::encode("nack"));
                 return true;
             }
 
             if (!requestRefreshSuperquadric(pc))
             {
                 yError() << prettyError( __FUNCTION__,  "Could not refresh superquadric.");
-                reply.addVocab(Vocab::encode("nack"));
+                reply.addVocab32(Vocab32::encode("nack"));
                 return true;
             }
 
             if(halt_requested)
             {
                 yInfo() << "Halt requested before end of process";
-                reply.addVocab(Vocab::encode("nack"));
+                reply.addVocab32(Vocab32::encode("nack"));
                 return true;
             }
 
             if (!computeGraspPose(grasp_pose))
             {
                 yError() << prettyError( __FUNCTION__,  "Could not compute grasping pose.");
-                reply.addVocab(Vocab::encode("nack"));
+                reply.addVocab32(Vocab32::encode("nack"));
                 return true;
             }
 
             if(halt_requested)
             {
                 yInfo() << "Halt requested before end of process";
-                reply.addVocab(Vocab::encode("nack"));
+                reply.addVocab32(Vocab32::encode("nack"));
                 return true;
             }
 
@@ -785,12 +785,12 @@ class GraspProcessorModule : public RFModule
             if (!executeGrasp(grasp_pose))
             {
                 yError() << prettyError( __FUNCTION__,  "Could not perform the grasping.");
-                reply.addVocab(Vocab::encode("nack"));
+                reply.addVocab32(Vocab32::encode("nack"));
                 return true;
             }
 
             yInfo() << obj << "grasped";
-            reply.addVocab(Vocab::encode("ack"));
+            reply.addVocab32(Vocab32::encode("ack"));
             return true;
         }
 
@@ -799,7 +799,7 @@ class GraspProcessorModule : public RFModule
             if(halt_requested)
             {
                 yInfo() << "Halt requested before end of process";
-                reply.addVocab(Vocab::encode("nack"));
+                reply.addVocab32(Vocab32::encode("nack"));
                 return true;
             }
 
@@ -812,18 +812,18 @@ class GraspProcessorModule : public RFModule
                 if(!position3d_bottle)
                 {
                     yError() << prettyError( __FUNCTION__,  "Invalid position vector format. Should be a list of double.");
-                    reply.addVocab(Vocab::encode("nack"));
+                    reply.addVocab32(Vocab32::encode("nack"));
                     return true;
                 }
 
                 if(position3d_bottle->size() != 3)
                 {
                     yError() << prettyError( __FUNCTION__,  "Invalid position vector size. Should be 3.");
-                    reply.addVocab(Vocab::encode("nack"));
+                    reply.addVocab32(Vocab32::encode("nack"));
                     return true;
                 }
 
-                for(int i=0 ; i<3 ; i++) position3d[i] = position3d_bottle->get(i).asDouble();
+                for(int i=0 ; i<3 ; i++) position3d[i] = position3d_bottle->get(i).asFloat64();
 
                 hand = command.get(2).toString();
                 if (hand == "right")
@@ -836,7 +836,7 @@ class GraspProcessorModule : public RFModule
                 }
                 else
                 {
-                    reply.addVocab(Vocab::encode("nack"));
+                    reply.addVocab32(Vocab32::encode("nack"));
                     return true;
                 }
                 if (command.size() == 4 && command.get(3).toString() == "gaze")
@@ -847,14 +847,14 @@ class GraspProcessorModule : public RFModule
             else
             {
                 yError() << prettyError( __FUNCTION__,  "Invalid command size.");
-                reply.addVocab(Vocab::encode("nack"));
+                reply.addVocab32(Vocab32::encode("nack"));
                 return true;
             }
 
             if(halt_requested)
             {
                 yInfo() << "Halt requested before end of process";
-                reply.addVocab(Vocab::encode("nack"));
+                reply.addVocab32(Vocab32::encode("nack"));
                 return true;
             }
 
@@ -862,42 +862,42 @@ class GraspProcessorModule : public RFModule
             if (!requestRefreshPointCloudFromPosition(pc, position3d, fixate_object))
             {
                 yError() << prettyError( __FUNCTION__,  "Could not refresh point cloud.");
-                reply.addVocab(Vocab::encode("nack"));
+                reply.addVocab32(Vocab32::encode("nack"));
                 return true;
             }
 
             if(halt_requested)
             {
                 yInfo() << "Halt requested before end of process";
-                reply.addVocab(Vocab::encode("nack"));
+                reply.addVocab32(Vocab32::encode("nack"));
                 return true;
             }
 
             if (!requestRefreshSuperquadric(pc))
             {
                 yError() << prettyError( __FUNCTION__,  "Could not refresh superquadric.");
-                reply.addVocab(Vocab::encode("nack"));
+                reply.addVocab32(Vocab32::encode("nack"));
                 return true;
             }
 
             if(halt_requested)
             {
                 yInfo() << "Halt requested before end of process";
-                reply.addVocab(Vocab::encode("nack"));
+                reply.addVocab32(Vocab32::encode("nack"));
                 return true;
             }
 
             if (!computeGraspPose(grasp_pose))
             {
                 yError() << prettyError( __FUNCTION__,  "Could not compute grasping pose.");
-                reply.addVocab(Vocab::encode("nack"));
+                reply.addVocab32(Vocab32::encode("nack"));
                 return true;
             }
 
             if(halt_requested)
             {
                 yInfo() << "Halt requested before end of process";
-                reply.addVocab(Vocab::encode("nack"));
+                reply.addVocab32(Vocab32::encode("nack"));
                 return true;
             }
 
@@ -906,12 +906,12 @@ class GraspProcessorModule : public RFModule
             if (!executeGrasp(grasp_pose))
             {
                 yError() << prettyError( __FUNCTION__,  "Could not perform the grasping.");
-                reply.addVocab(Vocab::encode("nack"));
+                reply.addVocab32(Vocab32::encode("nack"));
                 return true;
             }
 
             yInfo() << "Object grasped";
-            reply.addVocab(Vocab::encode("ack"));
+            reply.addVocab32(Vocab32::encode("ack"));
             return true;
         }
 
@@ -932,13 +932,13 @@ class GraspProcessorModule : public RFModule
                 }
                 else
                 {
-                    reply.addVocab(Vocab::encode("nack"));
+                    reply.addVocab32(Vocab32::encode("nack"));
                     return true;
                 }
             }
             else
             {
-                reply.addVocab(Vocab::encode("nack"));
+                reply.addVocab32(Vocab32::encode("nack"));
                 return true;
             }
             string filename = command.get(1).toString();
@@ -951,7 +951,7 @@ class GraspProcessorModule : public RFModule
             if (!file.is_open())
             {
                 yError() << prettyError( __FUNCTION__,  "Unable to open file");
-                reply.addVocab(Vocab::encode("nack"));
+                reply.addVocab32(Vocab32::encode("nack"));
                 return false;
             }
 
@@ -961,7 +961,7 @@ class GraspProcessorModule : public RFModule
             if (line != "COFF")
             {
                 yError() << prettyError( __FUNCTION__,  "File parsing failed");
-                reply.addVocab(Vocab::encode("nack"));
+                reply.addVocab32(Vocab32::encode("nack"));
                 return false;
             }
             line.clear();
@@ -1009,9 +1009,9 @@ class GraspProcessorModule : public RFModule
             if (action_render_rpc.getOutputCount() > 0)
             {
                 Bottle cmd, reply;
-                cmd.addVocab(Vocab::encode("drop"));
+                cmd.addVocab32(Vocab32::encode("drop"));
                 action_render_rpc.write(cmd, reply);
-                cmd_success = (reply.get(0).asVocab() == Vocab::encode("ack"));
+                cmd_success = (reply.get(0).asVocab32() == Vocab32::encode("ack"));
             }
             else
             {
@@ -1025,9 +1025,9 @@ class GraspProcessorModule : public RFModule
             if (action_render_rpc.getOutputCount() > 0)
             {
                 Bottle cmd, reply;
-                cmd.addVocab(Vocab::encode("home"));
+                cmd.addVocab32(Vocab32::encode("home"));
                 action_render_rpc.write(cmd, reply);
-                cmd_success = (reply.get(0).asVocab() == Vocab::encode("ack"));
+                cmd_success = (reply.get(0).asVocab32() == Vocab32::encode("ack"));
             }
             else
             {
@@ -1055,28 +1055,28 @@ class GraspProcessorModule : public RFModule
                     }
                     else
                     {
-                        reply.addVocab(Vocab::encode("nack"));
+                        reply.addVocab32(Vocab32::encode("nack"));
                         return true;
                     }
                 }
 
                 Vector super_quadric_parameters(12);
-                for(int i=0 ; i<12 ; i++) super_quadric_parameters[i] = command.get(i+1).asDouble();
+                for(int i=0 ; i<12 ; i++) super_quadric_parameters[i] = command.get(i+1).asFloat64();
 
                 vector<Matrix> raw_grasp_pose_candidates;
                 this->computeRawGraspPoseCandidates(super_quadric_parameters, raw_grasp_pose_candidates);
 
                 for(int i=0 ; i<raw_grasp_pose_candidates.size() ; i++)
                 {
-                    for(int j=0 ; j<3 ; j++) reply.addDouble(raw_grasp_pose_candidates[i](j,3));
+                    for(int j=0 ; j<3 ; j++) reply.addFloat64(raw_grasp_pose_candidates[i](j,3));
                     Vector orientation = dcm2axis(raw_grasp_pose_candidates[i]);
-                    for(int j=0 ; j<4 ; j++) reply.addDouble(orientation[j]);
+                    for(int j=0 ; j<4 ; j++) reply.addFloat64(orientation[j]);
                 }
                 return true;
             }
             else
             {
-                reply.addVocab(Vocab::encode("nack"));
+                reply.addVocab32(Vocab32::encode("nack"));
                 return true;
             }
         }
@@ -1102,20 +1102,20 @@ class GraspProcessorModule : public RFModule
                     }
                     else
                     {
-                        reply.addVocab(Vocab::encode("nack"));
+                        reply.addVocab32(Vocab32::encode("nack"));
                         return true;
                     }
                 }
 
                 Vector super_quadric_parameters(10);
-                for(int i=0 ; i<10 ; i++) super_quadric_parameters[i] = command.get(i+1).asDouble();
+                for(int i=0 ; i<10 ; i++) super_quadric_parameters[i] = command.get(i+1).asFloat64();
 
                 Vector orientation(4, 0.0);
-                for(int i=0 ; i<4 ; i++) orientation[i] = command.get(i+14).asDouble();
+                for(int i=0 ; i<4 ; i++) orientation[i] = command.get(i+14).asFloat64();
 
                 Matrix raw_grasp_pose_candidate = axis2dcm(orientation);
                 raw_grasp_pose_candidate(3,3) = 1;
-                for(int i=0 ; i<3 ; i++) raw_grasp_pose_candidate(i,3) = command.get(i+11).asDouble();
+                for(int i=0 ; i<3 ; i++) raw_grasp_pose_candidate(i,3) = command.get(i+11).asFloat64();
 
                 vector<Matrix> raw_grasp_pose_candidates;
                 raw_grasp_pose_candidates.push_back(raw_grasp_pose_candidate);
@@ -1125,20 +1125,20 @@ class GraspProcessorModule : public RFModule
 
                 if((refined_grasp_pose_candidates.front().cols()==4) && (refined_grasp_pose_candidates.front().rows()==4))
                 {
-                    reply.addVocab(Vocab::encode("ok"));
-                    for(int i=0 ; i<3 ; i++) reply.addDouble(refined_grasp_pose_candidates.front()(i,3));
+                    reply.addVocab32(Vocab32::encode("ok"));
+                    for(int i=0 ; i<3 ; i++) reply.addFloat64(refined_grasp_pose_candidates.front()(i,3));
                     Vector orientation = dcm2axis(refined_grasp_pose_candidates.front());
-                    for(int i=0 ; i<4 ; i++) reply.addDouble(orientation[i]);
+                    for(int i=0 ; i<4 ; i++) reply.addFloat64(orientation[i]);
                 }
                 else
                 {
-                    reply.addVocab(Vocab::encode("nok"));
+                    reply.addVocab32(Vocab32::encode("nok"));
                 }
                 return true;
             }
             else
             {
-                reply.addVocab(Vocab::encode("nack"));
+                reply.addVocab32(Vocab32::encode("nack"));
                 return true;
             }
         }
@@ -1153,17 +1153,17 @@ class GraspProcessorModule : public RFModule
             if (command.size() > 17)
             {
                 Vector super_quadric_parameters(10);
-                for(int i=0 ; i<10 ; i++) super_quadric_parameters[i] = command.get(i+1).asDouble();
+                for(int i=0 ; i<10 ; i++) super_quadric_parameters[i] = command.get(i+1).asFloat64();
 
                 vector<Matrix> grasp_pose_candidates;
                 for(int i=11 ; i+6<command.size() ; i+=7)
                 {
                     Vector orientation(4, 0.0);
-                    for(int j=0 ; j<4 ; j++) orientation[j] = command.get(i+3+j).asDouble();
+                    for(int j=0 ; j<4 ; j++) orientation[j] = command.get(i+3+j).asFloat64();
 
                     Matrix raw_grasp_pose_candidate = axis2dcm(orientation);
 
-                    for(int j=0 ; j<3 ; j++) raw_grasp_pose_candidate(j,3) = command.get(i+j).asDouble();
+                    for(int j=0 ; j<3 ; j++) raw_grasp_pose_candidate(j,3) = command.get(i+j).asFloat64();
 
                     grasp_pose_candidates.push_back(raw_grasp_pose_candidate);
                 }
@@ -1181,7 +1181,7 @@ class GraspProcessorModule : public RFModule
                     }
                     else
                     {
-                        reply.addVocab(Vocab::encode("nack"));
+                        reply.addVocab32(Vocab32::encode("nack"));
                         return true;
                     }
                 }
@@ -1194,18 +1194,18 @@ class GraspProcessorModule : public RFModule
                     best_pose.setSubvector(0, grasp_pose_candidates[best_grasp_pose_index].subcol(0,3,3));
                     best_pose.setSubvector(3, yarp::math::dcm2axis(grasp_pose_candidates[best_grasp_pose_index].submatrix(0,2, 0,2)));
 
-                    reply.addVocab(Vocab::encode("ok"));
-                    for(int j=0 ; j<best_pose.size() ; j++) reply.addDouble(best_pose[j]);
+                    reply.addVocab32(Vocab32::encode("ok"));
+                    for(int j=0 ; j<best_pose.size() ; j++) reply.addFloat64(best_pose[j]);
                 }
                 else
                 {
-                    reply.addVocab(Vocab::encode("nok"));
+                    reply.addVocab32(Vocab32::encode("nok"));
                 }
                 return true;
             }
             else
             {
-                reply.addVocab(Vocab::encode("nack"));
+                reply.addVocab32(Vocab32::encode("nack"));
                 return true;
             }
         }
@@ -1213,18 +1213,18 @@ class GraspProcessorModule : public RFModule
         if (command.get(0).toString() == "restart")
         {
             halt_requested = false;
-            reply.addVocab(Vocab::encode("ack"));
+            reply.addVocab32(Vocab32::encode("ack"));
             return true;
         }
 
         if (command.get(0).toString() == "halt")
         {
             halt_requested = true;
-            reply.addVocab(Vocab::encode("ack"));
+            reply.addVocab32(Vocab32::encode("ack"));
             return true;
         }
 
-        reply.addVocab(Vocab::encode(cmd_success ? "ack":"nack"));
+        reply.addVocab32(Vocab32::encode(cmd_success ? "ack":"nack"));
 
         return true;
 
@@ -1338,12 +1338,12 @@ class GraspProcessorModule : public RFModule
                 return false;
             }
 
-            cmd_request.addVocab(Vocab::encode("look"));
+            cmd_request.addVocab32(Vocab32::encode("look"));
             cmd_request.addString(object);
             cmd_request.addString("wait");
 
             action_render_rpc.write(cmd_request, cmd_reply);
-            if (cmd_reply.get(0).asVocab() != Vocab::encode("ack"))
+            if (cmd_reply.get(0).asVocab32() != Vocab32::encode("ack"))
             {
                 yError() << prettyError( __FUNCTION__,  "Didn't manage to look at the object");
                 return false;
@@ -1442,14 +1442,14 @@ class GraspProcessorModule : public RFModule
                 return false;
             }
 
-            cmd_request.addVocab(Vocab::encode("look"));
+            cmd_request.addVocab32(Vocab32::encode("look"));
             Bottle &subcmd_request = cmd_request.addList();
             subcmd_request.addString("cartesian");
-            for(int i=0 ; i<3 ; i++) subcmd_request.addDouble(position[i]);
+            for(int i=0 ; i<3 ; i++) subcmd_request.addFloat64(position[i]);
             cmd_request.addString("wait");
 
             action_render_rpc.write(cmd_request, cmd_reply);
-            if (cmd_reply.get(0).asVocab() != Vocab::encode("ack"))
+            if (cmd_reply.get(0).asVocab32() != Vocab32::encode("ack"))
             {
                 yError() << prettyError( __FUNCTION__,  "Didn't manage to look at the object");
                 return false;
@@ -1461,7 +1461,7 @@ class GraspProcessorModule : public RFModule
         cmd_reply.clear();
 
         cmd_request.addString("get_point_cloud_from_3D_position");
-        for(int i=0 ; i<3 ; i++) cmd_request.addDouble(position[i]);
+        for(int i=0 ; i<3 ; i++) cmd_request.addFloat64(position[i]);
 
         if(point_cloud_rpc.getOutputCount()<1)
         {
@@ -1660,10 +1660,10 @@ class GraspProcessorModule : public RFModule
             }
 
             Bottle cmd, reply;
-            cmd.addVocab(Vocab::encode("ask"));
+            cmd.addVocab32(Vocab32::encode("ask"));
             Bottle &subcmd = cmd.addList();
-            for(int i=0 ; i<3 ; i++) subcmd.addDouble(x_d[i]);
-            for(int i=0 ; i<4 ; i++) subcmd.addDouble(o_d[i]);
+            for(int i=0 ; i<3 ; i++) subcmd.addFloat64(x_d[i]);
+            for(int i=0 ; i<4 ; i++) subcmd.addFloat64(o_d[i]);
             if(grasping_hand == WhichHand::HAND_LEFT)
             {
                 cmd.addString("left");
@@ -1680,7 +1680,7 @@ class GraspProcessorModule : public RFModule
                 return false;
             }
 
-            if(reply.get(0).asVocab() != Vocab::encode("ack"))
+            if(reply.get(0).asVocab32() != Vocab32::encode("ack"))
             {
                 yError() << prettyError( __FUNCTION__,  "getPoseCostFunction: invalid reply from action rendering module:") << reply.toString();
                 return false;
@@ -1700,7 +1700,7 @@ class GraspProcessorModule : public RFModule
 
             Bottle *joints = reply.find("q").asList();
             q_d_hat.resize(joints->size());
-            for(int i=0 ; i<joints->size() ; i++) q_d_hat[i] = joints->get(i).asDouble();
+            for(int i=0 ; i<joints->size() ; i++) q_d_hat[i] = joints->get(i).asFloat64();
 
             if(!reply.check("x"))
             {
@@ -1710,9 +1710,9 @@ class GraspProcessorModule : public RFModule
 
             Bottle *position = reply.find("x").asList();
             x_d_hat.resize(3);
-            for(int i=0 ; i<3 ; i++) x_d_hat[i] = position->get(i).asDouble();
+            for(int i=0 ; i<3 ; i++) x_d_hat[i] = position->get(i).asFloat64();
             o_d_hat.resize(4);
-            for(int i=0 ; i<4 ; i++) o_d_hat[i] = position->get(3+i).asDouble();
+            for(int i=0 ; i<4 ; i++) o_d_hat[i] = position->get(3+i).asFloat64();
         }
 
         yDebug() << "Requested: " << candidate_pose.toString();
@@ -1948,7 +1948,7 @@ class GraspProcessorModule : public RFModule
         if (robot != "icubSim" && table_calib_rpc.getOutputCount() > 0)
         {
             Bottle table_cmd, table_rply;
-            table_cmd.addVocab(Vocab::encode("get"));
+            table_cmd.addVocab32(Vocab32::encode("get"));
             table_cmd.addString("table");
 
             table_calib_rpc.write(table_cmd, table_rply);
@@ -1960,7 +1960,7 @@ class GraspProcessorModule : public RFModule
                     planar_obstacle[1] = 0.0;
                     planar_obstacle[2] = 1.0;
 
-                    planar_obstacle[3] = - payload->get(1).asDouble();
+                    planar_obstacle[3] = - payload->get(1).asFloat64();
                     table_ok = true;
                 }
             }
@@ -2152,10 +2152,10 @@ class GraspProcessorModule : public RFModule
                 command.addString("iol-right");
             }
 
-            command.addDouble(poseToFix(0));    //  x value
-            command.addDouble(poseToFix(1));    //  y value
-            command.addDouble(poseToFix(2));    //  z value
-            command.addInt(invert?1:0);         //  flag to invert input/output map
+            command.addFloat64(poseToFix(0));    //  x value
+            command.addFloat64(poseToFix(1));    //  y value
+            command.addFloat64(poseToFix(2));    //  z value
+            command.addInt32(invert?1:0);         //  flag to invert input/output map
 
             reach_calib_rpc.write(command, reply);
 
@@ -2165,12 +2165,12 @@ class GraspProcessorModule : public RFModule
                 yError() << prettyError( __FUNCTION__,  "Failure retrieving fixed pose");
                 return false;
             }
-            else if (reply.get(0).asVocab() == Vocab::encode("ok"))
+            else if (reply.get(0).asVocab32() == Vocab32::encode("ok"))
             {
                 poseFixed = poseToFix;
-                poseFixed(0) = reply.get(1).asDouble();
-                poseFixed(1) = reply.get(2).asDouble();
-                poseFixed(2) = reply.get(3).asDouble();
+                poseFixed(0) = reply.get(1).asFloat64();
+                poseFixed(1) = reply.get(2).asFloat64();
+                poseFixed(2) = reply.get(3).asFloat64();
                 return true;
             }
             else
@@ -2215,7 +2215,7 @@ class GraspProcessorModule : public RFModule
             return false;
         }
 
-        if (reply.get(0).asVocab() == Vocab::encode("fail"))
+        if (reply.get(0).asVocab32() == Vocab32::encode("fail"))
         {
             yError() << prettyError( __FUNCTION__,  entry_name + " transformation is not available");
             return false;
@@ -2240,7 +2240,7 @@ class GraspProcessorModule : public RFModule
         std::size_t k = 0;
         for (std::size_t i = 0; i < 4; i++)
             for (std::size_t j = 0; j < 4; j++)
-                H(i, j) = bottle_H->get(k++).asDouble();
+                H(i, j) = bottle_H->get(k++).asFloat64();
 
         // assign output
         transformation = H;
@@ -2353,13 +2353,13 @@ class GraspProcessorModule : public RFModule
             command.addString("grasp");
             Bottle &ptr = command.addList();
             ptr.addString("cartesian");
-            ptr.addDouble(pose(0));
-            ptr.addDouble(pose(1));
-            ptr.addDouble(pose(2));
-            ptr.addDouble(pose(3));
-            ptr.addDouble(pose(4));
-            ptr.addDouble(pose(5));
-            ptr.addDouble(pose(6));
+            ptr.addFloat64(pose(0));
+            ptr.addFloat64(pose(1));
+            ptr.addFloat64(pose(2));
+            ptr.addFloat64(pose(3));
+            ptr.addFloat64(pose(4));
+            ptr.addFloat64(pose(5));
+            ptr.addFloat64(pose(6));
 
 
             Bottle &ptr1 = command.addList();
@@ -2367,12 +2367,12 @@ class GraspProcessorModule : public RFModule
             Bottle &ptr2 = ptr1.addList();
             if (grasping_hand == WhichHand::HAND_LEFT)
             {
-                for(int i=0 ; i<4 ; i++) ptr2.addDouble(grasper_approach_parameters_left[i]);
+                for(int i=0 ; i<4 ; i++) ptr2.addFloat64(grasper_approach_parameters_left[i]);
                 command.addString("left");
             }
             else
             {
-                for(int i=0 ; i<4 ; i++) ptr2.addDouble(grasper_approach_parameters_right[i]);
+                for(int i=0 ; i<4 ; i++) ptr2.addFloat64(grasper_approach_parameters_right[i]);
                 command.addString("right");
             }
 
